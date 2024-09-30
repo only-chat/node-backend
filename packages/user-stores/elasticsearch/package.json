@@ -1,0 +1,36 @@
+{
+  "name": "@only-chat/elasticsearch-user-store",
+  "version": "0.1.0",
+  "description": "Elasticsearchn storage for only-chat",
+  "homepage": "https://github.com/only-chat/node-backend/packages/stores/elasticsearch",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/only-chat/node-backend.git",
+    "directory": "packages/stores/elasticsearch"
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "author": "only-chat",
+  "license": "MIT",
+  "dependencies": {
+    "@elastic/elasticsearch": "^8.15.0"
+  },
+  "devDependencies": {
+    "@only-chat/types": "^0.1.0",
+    "@types/node": "^22.7.4",
+    "typescript": "^5.4.5"
+  },
+  "files": [
+    "dist/"
+  ],
+  "keywords": [
+    "elasticsearch",
+    "only-chat",
+    "store",
+    "user"
+  ]
+}

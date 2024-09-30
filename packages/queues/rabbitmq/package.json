@@ -1,0 +1,35 @@
+{
+  "name": "@only-chat/rabbitmq-queue",
+  "version": "0.1.0",
+  "description": "RabbitMQ queue for only-chat",
+  "homepage": "https://github.com/only-chat/node-backend/packages/queues/rabbitmq",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/only-chat/node-backend.git",
+    "directory": "packages/queues/rabbitmq"
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "author": "only-chat",
+  "license": "MIT",
+  "devDependencies": {
+    "@only-chat/types": "^0.1.0",
+    "@types/amqplib": "^0.10.5",
+    "typescript": "^5.4.5"
+  },
+  "files": [
+    "dist/"
+  ],
+  "keywords": [
+    "node",
+    "only-chat",
+    "rabbitmq"
+  ],
+  "dependencies": {
+    "amqplib": "^0.10.4"
+  }
+}

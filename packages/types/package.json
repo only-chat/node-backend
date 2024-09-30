@@ -1,0 +1,23 @@
+{
+  "name": "@only-chat/types",
+  "version": "0.1.0",
+  "description": "TypeScript definitions for only-chat",
+  "homepage": "https://github.com/only-chat/node-backend/packages/types",
+  "main": "",
+  "types": "index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/only-chat/node-backend.git",
+    "directory": "packages/types"
+  },
+  "scripts": {},
+  "author": "only-chat",
+  "license": "MIT",
+  "dependencies": {
+    "@types/node": "^22.7.4"
+  },
+  "keywords": [
+    "only-chat",
+    "type"
+  ]
+}
