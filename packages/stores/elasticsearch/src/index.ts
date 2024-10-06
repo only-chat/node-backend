@@ -152,8 +152,8 @@ async function findMessages(r: FindRequest): Promise<FindResult> {
         size: r.size,
         sort,
         query,
-        aggs : {
-            total_count : { value_count : { field : "_id" } }
+        aggs: {
+            total_count: { value_count: { field: "_id" } }
         }
     });
 
@@ -348,40 +348,44 @@ async function getParticipantConversationById(participant: string | undefined, i
 }
 
 async function getParticipantConversations(participant: string, excludeIds: string[], from: number = 0, size: number = 100): Promise<ConversationsResult> {
-    const messagesResult: estypes.SearchResponseBody<Message, AggregationsConversationIdTermAggregate> = await client.search({
-        index: messagesIndex,
-        size: 0,
-        query: {
-            bool: {
-                must:{
-                    term: {
-                        participants: {
-                            value: participant,
-                        },
-                    },
-                },
-                must_not: { terms: { conversationId: excludeIds } },
-            },
-        },
-        aggs : {
-            conversation_id_agg : {
-                aggs: {
-                    timestamp_agg: {
-                        max: {
-                            script: "Math.max(doc.createdAt.value.millis, Math.max(doc.updatedAt.size()==0 ? 0 : doc.updatedAt.value.millis, doc.deletedAt.size()==0 ? 0 : doc.deletedAt.value.millis))",
-                        },
-                    },
-                    timestamp_bucket_sort: {
-                        bucket_sort: { sort: [{ timestamp_agg: 'desc' }], size},
-                    },
-                },
-                terms : { field : 'conversationId',  size },
-            },
-        },
-    });
+    let ids: string[] = [];
 
-    const buckets = messagesResult.aggregations!.conversation_id_agg.buckets as estypes.AggregationsStringTermsBucketKeys[];
-    const ids = buckets.map(b=>b.key).filter(b=>!!b);
+    if(size>0) {
+        const messagesResult: estypes.SearchResponseBody<Message, AggregationsConversationIdTermAggregate> = await client.search({
+            index: messagesIndex,
+            size: 0,
+            query: {
+                bool: {
+                    must: {
+                        term: {
+                            participants: {
+                                value: participant,
+                            },
+                        },
+                    },
+                    must_not: { terms: { conversationId: excludeIds } },
+                },
+            },
+            aggs: {
+                conversation_id_agg: {
+                    aggs: {
+                        timestamp_agg: {
+                            max: {
+                                script: "Math.max(doc.createdAt.value.millis, Math.max(doc.updatedAt.size()==0 ? 0 : doc.updatedAt.value.millis, doc.deletedAt.size()==0 ? 0 : doc.deletedAt.value.millis))",
+                            },
+                        },
+                        timestamp_bucket_sort: {
+                            bucket_sort: { sort: [{ timestamp_agg: 'desc' }], size },
+                        },
+                    },
+                    terms: { field: 'conversationId', size },
+                },
+            },
+        });
+
+        const buckets = messagesResult.aggregations!.conversation_id_agg.buckets as estypes.AggregationsStringTermsBucketKeys[];
+        ids = buckets.map(b => b.key).filter(b => !!b);
+    }
 
     const query = {
         bool: {
@@ -394,13 +398,15 @@ async function getParticipantConversations(participant: string, excludeIds: stri
             },
             must_not: [
                 {
-                ids: {
-                    values: excludeIds,
-                }},
-                {exists: {
-                    field: "deletedAt"
-                }
-            }],
+                    ids: {
+                        values: excludeIds,
+                    }
+                },
+                {
+                    exists: {
+                        field: "deletedAt"
+                    }
+                }],
         }
     }
 
@@ -409,16 +415,18 @@ async function getParticipantConversations(participant: string, excludeIds: stri
         from,
         size,
         sort: [
-            {_script: {
-                script: `${JSON.stringify(ids)}.indexOf(doc._id.value)`,
-                type: 'number',
-            }},
+            {
+                _script: {
+                    script: `${JSON.stringify(ids)}.indexOf(doc._id.value)`,
+                    type: 'number',
+                }
+            },
             { createdAt: 'desc' },
             { _id: 'desc' },
         ],
         query,
-        aggs : {
-            total_count : { value_count : { field : "_id" } }
+        aggs: {
+            total_count: { value_count: { field: "_id" } }
         }
     });
 
@@ -426,11 +434,11 @@ async function getParticipantConversations(participant: string, excludeIds: stri
 
     var m = new Map(hits.map(i => [i.id, i]));
 
-    const conversations = ids.map(id => m.get(id) as Conversation).filter(c=>!!c);
-    
-    if(conversations.length < size) {
+    const conversations = ids.map(id => m.get(id) as Conversation).filter(c => !!c);
+
+    if (conversations.length < size) {
         const h = new Set(ids);
-        conversations.push(...hits.filter(c => !h.has(c.id)).slice(0, size - conversations.length));
+        conversations.push(...hits.filter(c => !h.has(c.id!)).slice(0, size - conversations.length));
     }
 
     return {

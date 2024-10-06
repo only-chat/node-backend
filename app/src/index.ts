@@ -1,5 +1,5 @@
 import { WebSocketServer } from 'ws';
-import { appId, storeConfig, userStoreConfig, host, port, queueConfig, watchConversationId, wsPingInterval } from '../config.js';
+import { appId, storeConfig, userStoreConfig, host, port, queueConfig, wsPingInterval } from '../config.js';
 import { initialize as initializeQueue } from '@only-chat/rabbitmq-queue';
 import { initialize as initializeStore, saveInstance } from '@only-chat/elasticsearch-store';
 import { initialize as initializeUserStore } from '@only-chat/elasticsearch-user-store';
@@ -24,7 +24,7 @@ const instanceId = response._id;
 
 logger.debug('Instance id:', instanceId);
 
-initializeClient({queue, store, userStore, instanceId, watchConversationId}, logger);
+initializeClient({queue, store, userStore, instanceId}, logger);
 
 const ws = new WebSocketServer({ host, port });
 

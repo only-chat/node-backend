@@ -13,4 +13,7 @@
     "sourceMap": true,
     "moduleResolution": "NodeNext"
   },
+  "include": [
+    "src"
+  ]
 }

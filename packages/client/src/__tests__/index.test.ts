@@ -8,7 +8,6 @@ import { MockTransport } from '../mocks/mockTransport.js';
 import type { Log } from '@only-chat/types/log.js';
 import type { Message } from '@only-chat/types/queue.js';
 
-const watchConversationId = '@watch'
 const logger: Log | undefined = undefined;
 
 const currentTime = new Date('2024-08-01T00:00:00.000Z');
@@ -41,7 +40,7 @@ describe('client', () => {
 
         const instanceId = response._id;
 
-        initializeClient({ queue, store, userStore, instanceId, watchConversationId }, logger);
+        initializeClient({ queue, store, userStore, instanceId }, logger);
 
         const mockTransport = new MockTransport();
 
@@ -54,15 +53,15 @@ describe('client', () => {
         expect(WsClient.conversations.size).toBe(0);
 
         const userName = 'test';
-        let data = JSON.stringify({ name: userName, password: 'test' });
+        let data = JSON.stringify({ authInfo: { name: userName, password: 'test' }, conversationsSize: 100 });
 
         let msg = await Promise.any(mockTransport.sendToClient(data));
 
         let msgCount = 1;
-        
+
         expect(client.state).toBe(WsClientState.Connected);
         expect(msg).toHaveLength(msgCount + 1);
-        expect(msg[msgCount-1]).toBe(`{"type":"hello","instanceId":"${instanceId}"}`);
+        expect(msg[msgCount - 1]).toBe(`{"type":"hello","instanceId":"${instanceId}"}`);
         expect(msg[msgCount++]).toBe(`{"type":"connection","connectionId":"1","id":"${userName}","conversations":{"conversations":[],"from":0,"size":100,"total":0}}`);
 
         expect(queueMessages).toHaveLength(queueMessagesCount + 1);
@@ -95,13 +94,13 @@ describe('client', () => {
         msgCount++;
 
         expect(client.state).toBe(WsClientState.Session);
-        expect(msg).toHaveLength(msgCount+1);
+        expect(msg).toHaveLength(msgCount + 1);
 
         let id = '1';
         const conversationId = '1';
         const fromConnectionId = '1';
 
-        expect(msg[msgCount-1]).toBe(`{"type":"conversation","conversation":{"id":"${conversationId}","clientConversationId":"${clientConversationId}","participants":${JSON.stringify(participants)},"title":"${conversationTitle}","createdBy":"${userName}","createdAt":"${jsonCurrentTime}"},"connected":["${userName}"]}`);
+        expect(msg[msgCount - 1]).toBe(`{"type":"conversation","conversation":{"id":"${conversationId}","clientConversationId":"${clientConversationId}","participants":${JSON.stringify(participants)},"title":"${conversationTitle}","createdBy":"${userName}","createdAt":"${jsonCurrentTime}"},"connected":["${userName}"]}`);
         expect(msg[msgCount++]).toBe(`{"id":"${id}","conversationId":"${conversationId}","participants":${JSON.stringify(participants)},"fromConnectionId":"${fromConnectionId}","fromId":"${userName}","type":"joined","data":null,"createdAt":"${jsonCurrentTime}"}`);
 
         expect(queueMessages).toHaveLength(queueMessagesCount + 1);
@@ -161,7 +160,7 @@ describe('client', () => {
         id = '2';
 
         msg = await Promise.any(mockTransport.sendToClient(data));
-        expect(msg).toHaveLength(msgCount+1);
+        expect(msg).toHaveLength(msgCount + 1);
         expect(msg[msgCount++]).toBe(`{"id":"${id}","conversationId":"${conversationId}","participants":${JSON.stringify(participants)},"fromConnectionId":"${fromConnectionId}","fromId":"${userName}","type":"text","data":${JSON.stringify(textData)},"createdAt":"${jsonCurrentTime}"}`);
 
         expect(queueMessages).toHaveLength(queueMessagesCount + 1);
@@ -206,7 +205,7 @@ describe('client', () => {
 
         msg = await Promise.any(mockTransport.sendToClient(data));
 
-        expect(msg).toHaveLength(msgCount+1);
+        expect(msg).toHaveLength(msgCount + 1);
         expect(msg[msgCount++]).toBe(`{"id":"${id}","conversationId":"${conversationId}","participants":${JSON.stringify(participants)},"fromConnectionId":"${fromConnectionId}","fromId":"${userName}","type":"message-updated","data":${JSON.stringify(updateMessageData)},"createdAt":"${jsonCurrentTime}"}`);
 
         expect(queueMessages).toHaveLength(queueMessagesCount + 1);
@@ -263,7 +262,7 @@ describe('client', () => {
 
         msg = await Promise.any(mockTransport.sendToClient(data));
 
-        expect(msg).toHaveLength(msgCount+1);
+        expect(msg).toHaveLength(msgCount + 1);
         expect(msg[msgCount++]).toBe(`{"id":"${id}","conversationId":"${conversationId}","participants":${JSON.stringify(newParticipants)},"fromConnectionId":"${fromConnectionId}","fromId":"${userName}","type":"updated","data":${JSON.stringify(updateConversationData)},"createdAt":"${jsonCurrentTime}"}`);
 
         expect(queueMessages).toHaveLength(queueMessagesCount + 1);
@@ -306,7 +305,7 @@ describe('client', () => {
 
         msg = await Promise.any(mockTransport.sendToClient(data));
 
-        expect(msg).toHaveLength(msgCount+1);
+        expect(msg).toHaveLength(msgCount + 1);
         expect(msg[msgCount++]).toBe(`{"id":"${id}","conversationId":"${conversationId}","participants":${JSON.stringify(newParticipants)},"fromConnectionId":"${fromConnectionId}","fromId":"${userName}","type":"message-deleted","data":${JSON.stringify(deleteMessageData)},"createdAt":"${jsonCurrentTime}"}`);
 
         expect(queueMessages).toHaveLength(queueMessagesCount + 1);

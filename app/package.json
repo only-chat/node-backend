@@ -18,8 +18,8 @@
     "typescript": "^5.4.5"
   },
   "dependencies": {
-    "@only-chat/client": "^0.1.0",
-    "@only-chat/elasticsearch-store": "^0.1.0",
+    "@only-chat/client": "file:../packages/client",
+    "@only-chat/elasticsearch-store": "file:../packages/stores/elasticsearch",
     "@only-chat/elasticsearch-user-store": "^0.1.0",
     "@only-chat/rabbitmq-queue": "^0.1.0",
     "ws": "^8.13.0"

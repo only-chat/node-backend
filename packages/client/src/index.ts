@@ -1,8 +1,10 @@
 import type { AuthenticationInfo, UserStore } from '@only-chat/types/userStore.js';
-import type { Conversation, ConversationUpdate, ConversationsResult, FileMessage, FindRequest, FindResult, LoadRequest, Message, MessageData, MessageDelete, MessageStore, MessageType, MessageUpdate } from '@only-chat/types/store.js';
+import type { Conversation, ConversationUpdate, ConversationsResult, FileMessage, FindRequest, FindResult, LoadRequest, Message, MessageData, MessageDelete, MessageStore, MessageType as StoreMessageType, MessageUpdate } from '@only-chat/types/store.js';
 import type { Log } from '@only-chat/types/log.js';
 import type { Message as QueueMessage, MessageData as QueueMessageData, MessageQueue, MessageType as QueueMessageType } from '@only-chat/types/queue.js';
 import type { Transport } from '@only-chat/types/transport.js';
+
+type MessageType = 'hello' | 'connected' | 'disconnected' | 'join' | 'joined' | 'watch' | 'left' | 'close' | 'closed' | 'delete' | 'deleted' | 'update' | 'updated' | 'load' | 'load-messages' | 'message-update' | 'message-updated' | 'message-delete' | 'message-deleted' | 'text' | 'file' | 'find'
 
 export enum TransportState {
     /** The connection is not yet open. */
@@ -20,7 +22,11 @@ export interface Config {
     store: MessageStore;
     userStore: UserStore;
     instanceId: string;
-    watchConversationId?: string;
+}
+
+interface ConnectRequest {
+    authInfo: AuthenticationInfo;
+    conversationsSize?: number;
 }
 
 interface ConversationInfo {
@@ -29,11 +35,12 @@ interface ConversationInfo {
 }
 
 interface JoinRequest {
-    type: string;
+    type: MessageType;
     clientConversationId?: string;
     participants?: string[];
     conversationId?: string;
     conversationTitle?: string;
+    messagesSize?: number;
 }
 
 export enum WsClientState {
@@ -45,17 +52,17 @@ export enum WsClientState {
     Disconnected = 0xFF,
 }
 
+const defaultSize = 100;
+
 const sendStates = [WsClientState.Session, WsClientState.WatchSession];
 
-const types: MessageType[] = ['file', 'text'];
+const types: StoreMessageType[] = ['file', 'text'];
 
 let instanceId: string = undefined!;
 let logger: Log | undefined;
 let queue: MessageQueue = undefined!;
 let store: MessageStore = undefined!;
 let userStore: UserStore = undefined!;
-let watchConversationId: string | undefined;
-
 
 export class WsClient {
     // These members are public for testing purposes only
@@ -287,7 +294,7 @@ export class WsClient {
         if (!qm.conversationId) {
             return;
         }
-        
+
         const msg: Message = {
             id: qm.id,
             conversationId: qm.conversationId,
@@ -352,7 +359,7 @@ export class WsClient {
         }
     }
 
-    private async publishMessage(type: MessageType, clientMessageId: string | undefined, data: MessageData, save: boolean): Promise<boolean> {
+    private async publishMessage(type: StoreMessageType, clientMessageId: string | undefined, data: MessageData, save: boolean): Promise<boolean> {
         let id: string | undefined = undefined;
         const createdAt = new Date();
 
@@ -449,7 +456,7 @@ export class WsClient {
     private async watch(): Promise<void> {
         this.state = WsClientState.WatchSession;
 
-        const conversations = await this.getConversations();
+        const conversations = await this.getConversations(0, 0);
 
         WsClient.addWatchClient(this);
 
@@ -533,11 +540,13 @@ export class WsClient {
 
         await WsClient.addClient(conversation!, this);
 
+        const size = request.messagesSize != null && request.messagesSize >= 0 ? request.messagesSize : defaultSize;
+
         let lastMessage: Message | undefined = undefined;
         let oldMessages: FindResult | undefined = undefined;
         if (!created) {
             const fr: FindRequest = {
-                size: 0,
+                size,
                 conversationIds: [conversation!.id!],
                 types,
                 sort: 'createdAt',
@@ -580,14 +589,14 @@ export class WsClient {
             switch (this.state) {
                 case WsClientState.None:
                     {
-                        const authInfo: AuthenticationInfo = JSON.parse(data.toString());
-                        this.connect(authInfo).then(response => {
+                        const request: ConnectRequest = JSON.parse(data.toString());
+                        this.connect(request).then(response => {
                             if (!response) {
-                                this.stop('Not connected');
+                                this.stop('Failed connect');
                             }
                         }).catch(e => {
                             this.lastError = e.message;
-                            this.stop('Not connected');
+                            this.stop('Failed connect');
                         });
                     }
                     break;
@@ -595,22 +604,25 @@ export class WsClient {
                     {
                         const request: JoinRequest = JSON.parse(data.toString());
 
-                        if (request.type !== 'join') {
-                            throw new Error('Wrong join');
-                        }
-
-                        if (watchConversationId && request.conversationId === watchConversationId) {
-                            this.watch().catch(e => this.stop('Failed watch'));
-                        }
-                        else {
-                            this.join(request).then(response => {
-                                if (!response) {
-                                    this.stop('Not joined');
-                                }
-                            }).catch(e => {
-                                this.lastError = e.message;
-                                this.stop('Not joined');
-                            });
+                        switch (request.type) {
+                            case 'watch':
+                                this.watch().catch(e => {
+                                    this.lastError = e.message;
+                                    this.stop('Failed watch');
+                                });
+                                break; 
+                            case 'join':
+                                this.join(request).then(response => {
+                                    if (!response) {
+                                        this.stop('Failed join');
+                                    }
+                                }).catch(e => {
+                                    this.lastError = e.message;
+                                    this.stop('Failed join');
+                                });
+                                break;
+                            default:
+                                throw new Error('Wrong request type');
                         }
                     }
                     break;
@@ -624,7 +636,10 @@ export class WsClient {
                                 if (false === result) {
                                     throw new Error('Failed processMessage');
                                 }
-                            }).catch(e => this.stop(e.message));
+                            }).catch(e => {
+                                this.lastError = e.message;
+                                this.stop(e.message);
+                            });
                         } else {
                             this.stop('Wrong message');
                         }
@@ -901,8 +916,9 @@ export class WsClient {
         return result;
     }
 
-    private async connect(authInfo: AuthenticationInfo): Promise<boolean> {
-        this.id = await userStore.authenticate(authInfo);
+    private async connect(request: ConnectRequest): Promise<boolean> {
+
+        this.id = request?.authInfo && await userStore.authenticate(request.authInfo);
 
         if (!this.id) {
             this.lastError = 'Authentication failed';
@@ -924,7 +940,7 @@ export class WsClient {
 
         logger?.debug(`Save connection with id ${this.connectionId} succeeded`);
 
-        const conversations = await this.getConversations();
+        const conversations = await this.getConversations(0, request.conversationsSize);
 
         this.transport.send(JSON.stringify({
             type: 'connection',
@@ -936,18 +952,16 @@ export class WsClient {
         return this.publishMessage('connected', undefined, null, false);
     }
 
-    private async getConversations(from = 0, size = 100, excludeIds?: string[]): Promise<ConversationsResult> {
+    private async getConversations(from: number = 0, conversationsSize?: number, excludeIds?: string[]): Promise<ConversationsResult> {
+
+        const size = conversationsSize != null && conversationsSize >= 0 ? conversationsSize : defaultSize;
+
         const result = await store.getParticipantConversations(this.id!, excludeIds || [], from, size);
 
         const ids = result.conversations.map(c => c.id!);
 
         if (!ids?.length) {
-            return {
-                conversations: [],
-                from,
-                size,
-                total: 0,
-            };
+            return result;
         }
 
         const messagesInfo = await store.getLastMessagesTimestamps(this.id!, ids);
@@ -967,7 +981,7 @@ export class WsClient {
     }
 
     private async findMessages(request: FindRequest, clientMessageId?: string): Promise<void> {
-        const result = await store.getParticipantConversations(this.id!, [], request.from || 0, request.size || 100);
+        const result = await store.getParticipantConversations(this.id!, [], request.from || 0, request.size || defaultSize);
 
         if (request.conversationIds?.length) {
             request.conversationIds = Array.from(new Set(result.conversations.map(c => c.id!).concat(request.conversationIds)));
@@ -1019,7 +1033,6 @@ export function initialize(config: Config, log?: Log) {
     queue = config.queue;
     store = config.store;
     userStore = config.userStore;
-    watchConversationId = config.watchConversationId;
 
     queue?.subscribe(WsClient.translateQueueMessage);
 }
