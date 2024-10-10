@@ -71,7 +71,7 @@ export interface LoadRequest {
     before?: Date
 }
 
-export type MessageType = 'hello' | 'connected' | 'disconnected' | 'joined' | 'left' | 'close' | 'closed' | 'delete' | 'deleted' | 'update' | 'updated' | 'load' | 'message-update' | 'message-updated' | 'message-delete' | 'message-deleted' | 'text' | 'file' | 'find' | 'load-messages'
+export type MessageType = 'joined' | 'left' | 'closed' | 'deleted' | 'updated' | 'message-updated' | 'message-deleted' | 'text' | 'file'
 
 export type MessageData = ConversationUpdate | FileMessage | FindRequest | LoadRequest | MessageDelete | MessageUpdate | TextMessage | null
 

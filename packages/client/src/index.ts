@@ -1,10 +1,24 @@
 import type { AuthenticationInfo, UserStore } from '@only-chat/types/userStore.js';
-import type { Conversation, ConversationUpdate, ConversationsResult, FileMessage, FindRequest, FindResult, LoadRequest, Message, MessageData, MessageDelete, MessageStore, MessageType as StoreMessageType, MessageUpdate } from '@only-chat/types/store.js';
+import type { Conversation, ConversationUpdate, ConversationsResult, FileMessage, FindRequest, FindResult, LoadRequest, MessageData, MessageDelete, MessageStore, MessageType as StoreMessageType, MessageUpdate } from '@only-chat/types/store.js';
 import type { Log } from '@only-chat/types/log.js';
 import type { Message as QueueMessage, MessageData as QueueMessageData, MessageQueue, MessageType as QueueMessageType } from '@only-chat/types/queue.js';
 import type { Transport } from '@only-chat/types/transport.js';
 
-type MessageType = 'hello' | 'connected' | 'disconnected' | 'join' | 'joined' | 'watch' | 'left' | 'close' | 'closed' | 'delete' | 'deleted' | 'update' | 'updated' | 'load' | 'load-messages' | 'message-update' | 'message-updated' | 'message-delete' | 'message-deleted' | 'text' | 'file' | 'find'
+type MessageType = 'hello' | 'join' | 'watch' | 'left' | 'close' | 'delete' | 'update' | 'load' | 'load-messages' | 'message-update' | 'message-delete' | 'find' | QueueMessageType;
+
+interface Message {
+    type: MessageType
+    id?: string
+    clientMessageId?: string
+    conversationId: string
+    participants: string[]
+    fromConnectionId: string
+    fromId: string
+    data: MessageData
+    createdAt: Date
+    updatedAt?: Date
+    deletedAt?: Date
+}
 
 export enum TransportState {
     /** The connection is not yet open. */
@@ -312,19 +326,19 @@ export class WsClient {
             await WsClient.publishToWsList(msg.conversationId, async (wc, _) => {
                 wc.send(msg);
 
-                if (wc.conversation?.id === msg.conversationId && msg.type === 'deleted') {
+                if (wc.conversation?.id === msg.conversationId && qm.type === 'deleted') {
                     await wc.stop('Deleted');
                 }
             });
 
-            if (msg.type === 'deleted') {
+            if (qm.type === 'deleted') {
                 WsClient.conversationsCache.delete(msg.conversationId);
             }
 
             return;
         }
 
-        switch (msg.type) {
+        switch (qm.type) {
             case 'text':
             case 'file':
                 if (null === msg.data) {
@@ -359,7 +373,7 @@ export class WsClient {
         }
     }
 
-    private async publishMessage(type: StoreMessageType, clientMessageId: string | undefined, data: MessageData, save: boolean): Promise<boolean> {
+    private async publishMessage(type: QueueMessageType, clientMessageId: string | undefined, data: MessageData, save: boolean): Promise<boolean> {
         let id: string | undefined = undefined;
         const createdAt = new Date();
 
@@ -368,8 +382,8 @@ export class WsClient {
                 throw new Error('Failed publishMessage');
             }
 
-            const m: Message = {
-                type,
+            const m: StoreMessageType = {
+                type: type as StoreMessageType,
                 conversationId: this.conversation.id,
                 participants: this.conversation.participants,
                 fromConnectionId: this.connectionId!,
@@ -390,7 +404,7 @@ export class WsClient {
 
         if (!Array.isArray(queue.acceptTypes) || (queue.acceptTypes as string[]).includes(type)) {
             return await queue.publish({
-                type: type as QueueMessageType,
+                type,
                 id,
                 instanceId,
                 conversationId: this.conversation?.id,
@@ -822,7 +836,7 @@ export class WsClient {
             return true;
         }
 
-        let broadcastType = msg.type;
+        let broadcastType = msg.type as QueueMessageType;
 
         switch (msg.type) {
             case 'text':
