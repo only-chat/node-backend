@@ -64,23 +64,16 @@ export interface FindResult {
     total: number
 }
 
-export interface LoadRequest {
-    from?: number
-    size?: number
-    excludeIds?: string[]
-    before?: Date
-}
-
 export type MessageType = 'joined' | 'left' | 'closed' | 'deleted' | 'updated' | 'message-updated' | 'message-deleted' | 'text' | 'file'
 
-export type MessageData = ConversationUpdate | FileMessage | FindRequest | LoadRequest | MessageDelete | MessageUpdate | TextMessage | null
+export type MessageData = ConversationUpdate | FileMessage | FindRequest | MessageDelete | MessageUpdate | TextMessage | null
 
 export interface Message {
     type: MessageType
     id?: string
     clientMessageId?: string
-    conversationId: string
-    participants: string[]
+    conversationId?: string
+    participants?: string[]
     fromConnectionId: string
     fromId: string
     data: MessageData

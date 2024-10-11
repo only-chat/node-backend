@@ -1,23 +1,14 @@
 import type { AuthenticationInfo, UserStore } from '@only-chat/types/userStore.js';
-import type { Conversation, ConversationUpdate, ConversationsResult, FileMessage, FindRequest, FindResult, LoadRequest, MessageData, MessageDelete, MessageStore, MessageType as StoreMessageType, MessageUpdate } from '@only-chat/types/store.js';
+import type { Conversation, ConversationUpdate, ConversationsResult, FileMessage, FindRequest, FindResult, Message as StoreMessage, MessageDelete, MessageStore, MessageType as StoreMessageType, MessageUpdate, TextMessage } from '@only-chat/types/store.js';
 import type { Log } from '@only-chat/types/log.js';
 import type { Message as QueueMessage, MessageData as QueueMessageData, MessageQueue, MessageType as QueueMessageType } from '@only-chat/types/queue.js';
 import type { Transport } from '@only-chat/types/transport.js';
 
-type MessageType = 'hello' | 'join' | 'watch' | 'left' | 'close' | 'delete' | 'update' | 'load' | 'load-messages' | 'message-update' | 'message-delete' | 'find' | QueueMessageType;
-
-interface Message {
-    type: MessageType
-    id?: string
-    clientMessageId?: string
-    conversationId: string
-    participants: string[]
-    fromConnectionId: string
-    fromId: string
-    data: MessageData
-    createdAt: Date
-    updatedAt?: Date
-    deletedAt?: Date
+export interface LoadRequest {
+    from?: number
+    size?: number
+    excludeIds?: string[]
+    before?: Date
 }
 
 export enum TransportState {
@@ -36,6 +27,24 @@ export interface Config {
     store: MessageStore;
     userStore: UserStore;
     instanceId: string;
+}
+
+type MessageType = 'hello' | 'join' | 'watch' | 'left' | 'close' | 'delete' | 'update' | 'load' | 'load-messages' | 'message-update' | 'message-delete' | 'find' | QueueMessageType;
+
+type MessageData = FindRequest | LoadRequest | QueueMessageData;
+
+interface Message {
+    type: MessageType
+    id?: string
+    clientMessageId?: string
+    conversationId: string
+    participants: string[]
+    fromConnectionId: string
+    fromId: string
+    data: MessageData
+    createdAt: Date
+    updatedAt?: Date
+    deletedAt?: Date
 }
 
 interface ConnectRequest {
@@ -373,7 +382,7 @@ export class WsClient {
         }
     }
 
-    private async publishMessage(type: QueueMessageType, clientMessageId: string | undefined, data: MessageData, save: boolean): Promise<boolean> {
+    private async publishMessage(type: MessageType, clientMessageId: string | undefined, data: MessageData, save: boolean): Promise<boolean> {
         let id: string | undefined = undefined;
         const createdAt = new Date();
 
@@ -382,7 +391,7 @@ export class WsClient {
                 throw new Error('Failed publishMessage');
             }
 
-            const m: StoreMessageType = {
+            const m: StoreMessage = {
                 type: type as StoreMessageType,
                 conversationId: this.conversation.id,
                 participants: this.conversation.participants,
@@ -404,7 +413,7 @@ export class WsClient {
 
         if (!Array.isArray(queue.acceptTypes) || (queue.acceptTypes as string[]).includes(type)) {
             return await queue.publish({
-                type,
+                type: type as QueueMessageType,
                 id,
                 instanceId,
                 conversationId: this.conversation?.id,
@@ -556,7 +565,7 @@ export class WsClient {
 
         const size = request.messagesSize != null && request.messagesSize >= 0 ? request.messagesSize : defaultSize;
 
-        let lastMessage: Message | undefined = undefined;
+        let lastMessage: StoreMessage | undefined = undefined;
         let oldMessages: FindResult | undefined = undefined;
         if (!created) {
             const fr: FindRequest = {
@@ -624,7 +633,7 @@ export class WsClient {
                                     this.lastError = e.message;
                                     this.stop('Failed watch');
                                 });
-                                break; 
+                                break;
                             case 'join':
                                 this.join(request).then(response => {
                                     if (!response) {
@@ -762,13 +771,13 @@ export class WsClient {
             return false;
         }
 
-        conversation.title = request?.title;
+        conversation.title = request.title;
 
         conversation.updatedAt = new Date();
 
         const participants = new Set([conversation.createdBy]);
 
-        request?.participants?.forEach(p => participants.add(p));
+        request.participants?.forEach(p => participants.add(p));
 
         conversation.participants = Array.from(participants);
 
@@ -873,18 +882,18 @@ export class WsClient {
                 break;
             case 'message-delete':
                 data = msg.data;
-                broadcast = !!data && await this.deleteMessage((data as MessageDelete));
+                broadcast = !!data && await this.deleteMessage(data as MessageDelete);
                 if (broadcast) {
                     broadcastType = 'message-deleted';
                     save = true;
                 }
                 break;
             case 'update':
-                data = msg.data;
-                broadcast = !!data && await this.updateConversation(data as ConversationUpdate);
+                data = msg.data as ConversationUpdate;
+                broadcast = !!data && await this.updateConversation(data);
                 if (broadcast) {
                     broadcastType = 'updated';
-                    (msg.data as ConversationUpdate).participants = this.conversation!.participants;
+                    data.participants = this.conversation!.participants;
                     save = true;
                 }
                 break;
@@ -924,7 +933,7 @@ export class WsClient {
         }
 
         if (broadcast) {
-            return this.publishMessage(broadcastType, msg.clientMessageId, data, save);
+            return this.publishMessage(broadcastType, msg.clientMessageId, data as QueueMessageData, save);
         }
 
         return result;
