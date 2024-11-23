@@ -1,0 +1,42 @@
+name: Publish Packages to npmjs
+on:
+  release:
+    types: [published]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      # Setup .npmrc file to publish to npm
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          registry-url: 'https://registry.npmjs.org'
+      - run: npm ci --prefix ./packages/types
+      - run: npm publish ./packages/types --provenance --access public
+      - run: npm ci --prefix ./packages/stores/elasticsearch
+      - run: npm run build --prefix ./packages/stores/elasticsearch
+      - run: npm publish ./packages/stores/elasticsearch --provenance --access public
+      - run: npm ci --prefix ./packages/stores/memory
+      - run: npm run build --prefix ./packages/stores/memory
+      - run: npm publish ./packages/stores/memory --provenance --access public
+      - run: npm ci --prefix ./packages/user-stores/elasticsearch
+      - run: npm run build --prefix ./packages/user-stores/elasticsearch
+      - run: npm publish ./packages/user-stores/elasticsearch --provenance --access public
+      - run: npm ci --prefix ./packages/user-stores/memory
+      - run: npm run build --prefix ./packages/user-stores/memory
+      - run: npm publish ./packages/stuser-storesores/memory --provenance --access public
+      - run: npm ci --prefix ./packages/queues/rabbitmq
+      - run: npm run build --prefix ./packages/queues/rabbitmq
+      - run: npm publish ./packages/queues/rabbitmq --provenance --access public
+      - run: npm ci --prefix ./packages/queues/memory
+      - run: npm run build --prefix ./packages/queues/memory
+      - run: npm publish ./packages/queues/memory --provenance --access public
+      - run: npm ci --prefix ./packages/client
+      - run: npm run build --prefix ./packages/client
+      - run: npm publish ./packages/client --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -7,7 +7,6 @@ export interface Connection {
 
 export interface Conversation {
     id?: string
-    clientConversationId?: string
     title?: string
     participants: string[]
     createdBy: string
@@ -18,8 +17,11 @@ export interface Conversation {
 }
 
 export interface ConversationUpdate {
+    conversationId?: string
     title?: string
     participants?: string[]
+    closedAt?: Date
+    deletedAt?: Date
 }
 
 export interface FileMessage {
@@ -64,24 +66,17 @@ export interface FindResult {
     total: number
 }
 
-export interface LoadRequest {
-    from?: number
-    size?: number
-    excludeIds?: string[]
-    before?: Date
-}
+export type MessageType = 'joined' | 'left' | 'closed' | 'deleted' | 'updated' | 'message-updated' | 'message-deleted' | 'text' | 'file'
 
-export type MessageType = 'hello' | 'connected' | 'disconnected' | 'joined' | 'left' | 'close' | 'closed' | 'delete' | 'deleted' | 'update' | 'updated' | 'load' | 'message-update' | 'message-updated' | 'message-delete' | 'message-deleted' | 'text' | 'file' | 'find' | 'load-messages'
-
-export type MessageData = ConversationUpdate | FileMessage | FindRequest | LoadRequest | MessageDelete | MessageUpdate | TextMessage | null
+export type MessageData = ConversationUpdate | FileMessage | MessageDelete | MessageUpdate | TextMessage | null
 
 export interface Message {
     type: MessageType
     id?: string
     clientMessageId?: string
-    conversationId: string
-    participants: string[]
-    fromConnectionId: string
+    conversationId?: string
+    participants?: string[]
+    connectionId: string
     fromId: string
     data: MessageData
     createdAt: Date
@@ -105,7 +100,6 @@ export interface ConversationsResult {
 
 export interface MessageStore {
     findMessages: (r: FindRequest) => Promise<FindResult>
-    getConversationByCreatorId: (createdBy: string, id: string) => Promise<Conversation | undefined>
     getConversationById: (id: string) => Promise<Conversation | undefined>
     getLastMessagesTimestamps: (fromId: string, conversationId: string[]) => Promise<ConversationLastMessages>
     getParticipantConversationById: (participant: string | undefined, id: string) => Promise<Conversation | undefined>

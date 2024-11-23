@@ -49,7 +49,7 @@ let peerToPeerConversationsIndex: string = undefined!;
 async function findMessages(r: FindRequest): Promise<FindResult> {
     const must_not: estypes.QueryDslQueryContainer[] = [{
         exists: {
-            field: "deletedAt"
+            field: 'deletedAt'
         }
     }];
 
@@ -152,8 +152,8 @@ async function findMessages(r: FindRequest): Promise<FindResult> {
         size: r.size,
         sort,
         query,
-        aggs : {
-            total_count : { value_count : { field : "_id" } }
+        aggs: {
+            total_count: { value_count: { field: '_id' } }
         }
     });
 
@@ -163,40 +163,6 @@ async function findMessages(r: FindRequest): Promise<FindResult> {
         size: r.size,
         total: result.aggregations?.total_count.value || result.hits.hits.length,
     };
-}
-
-async function getConversationByCreatorId(createdBy: string, id: string): Promise<Conversation | undefined> {
-    const result: estypes.SearchResponseBody<Conversation> = await client.search({
-        index: conversationsIndex,
-        size: 1,
-        query: {
-            bool: {
-                must: [
-                    {
-                        ids: {
-                            values: [id],
-                        }
-                    },
-                    {
-                        term: {
-                            createdBy: {
-                                value: createdBy,
-                            }
-                        }
-                    }
-                ],
-                must_not: {
-                    exists: {
-                        field: "deletedAt"
-                    }
-                },
-            }
-        }
-    });
-
-    const h = result.hits.hits[0];
-
-    return h?._source ? { ...h._source, id: h._id } : undefined;
 }
 
 const getConversationById = getParticipantConversationById.bind(this, undefined);
@@ -288,19 +254,20 @@ async function getLastMessagesTimestamps(fromId: string, conversationId: string[
 
         m.id = current?._id;
 
-        if (prev[m.conversationId]) {
-            if (!prev[m.conversationId].left || prev[m.conversationId].left! < m.createdAt) {
-                prev[m.conversationId].left = m.createdAt;
+        const id = m.conversationId!;
+        if (prev[id]) {
+            if (!prev[id].left || prev[id].left! < m.createdAt) {
+                prev[id].left = m.createdAt;
             }
         }
         else {
-            prev[m.conversationId] = { left: m.createdAt };
+            prev[id] = { left: m.createdAt };
         }
 
         if (types.includes(m.type)) {
-            const latest = prev[m.conversationId].latest;
+            const latest = prev[id].latest;
             if (!latest || latest.createdAt < m.createdAt) {
-                prev[m.conversationId].latest = m;
+                prev[id].latest = m;
             }
         }
 
@@ -335,7 +302,7 @@ async function getParticipantConversationById(participant: string | undefined, i
                 must,
                 must_not: {
                     exists: {
-                        field: "deletedAt"
+                        field: 'deletedAt'
                     }
                 },
             }
@@ -348,40 +315,44 @@ async function getParticipantConversationById(participant: string | undefined, i
 }
 
 async function getParticipantConversations(participant: string, excludeIds: string[], from: number = 0, size: number = 100): Promise<ConversationsResult> {
-    const messagesResult: estypes.SearchResponseBody<Message, AggregationsConversationIdTermAggregate> = await client.search({
-        index: messagesIndex,
-        size: 0,
-        query: {
-            bool: {
-                must:{
-                    term: {
-                        participants: {
-                            value: participant,
-                        },
-                    },
-                },
-                must_not: { terms: { conversationId: excludeIds } },
-            },
-        },
-        aggs : {
-            conversation_id_agg : {
-                aggs: {
-                    timestamp_agg: {
-                        max: {
-                            script: "Math.max(doc.createdAt.value.millis, Math.max(doc.updatedAt.size()==0 ? 0 : doc.updatedAt.value.millis, doc.deletedAt.size()==0 ? 0 : doc.deletedAt.value.millis))",
-                        },
-                    },
-                    timestamp_bucket_sort: {
-                        bucket_sort: { sort: [{ timestamp_agg: 'desc' }], size},
-                    },
-                },
-                terms : { field : 'conversationId',  size },
-            },
-        },
-    });
+    let ids: string[] = [];
 
-    const buckets = messagesResult.aggregations!.conversation_id_agg.buckets as estypes.AggregationsStringTermsBucketKeys[];
-    const ids = buckets.map(b=>b.key).filter(b=>!!b);
+    if (size > 0) {
+        const messagesResult: estypes.SearchResponseBody<Message, AggregationsConversationIdTermAggregate> = await client.search({
+            index: messagesIndex,
+            size: 0,
+            query: {
+                bool: {
+                    must: {
+                        term: {
+                            participants: {
+                                value: participant,
+                            },
+                        },
+                    },
+                    must_not: { terms: { conversationId: excludeIds } },
+                },
+            },
+            aggs: {
+                conversation_id_agg: {
+                    aggs: {
+                        timestamp_agg: {
+                            max: {
+                                script: 'Math.max(doc.createdAt.value.millis, Math.max(doc.updatedAt.size()==0 ? 0 : doc.updatedAt.value.millis, doc.deletedAt.size()==0 ? 0 : doc.deletedAt.value.millis))',
+                            },
+                        },
+                        timestamp_bucket_sort: {
+                            bucket_sort: { sort: [{ timestamp_agg: 'desc' }], size },
+                        },
+                    },
+                    terms: { field: 'conversationId', size, order: { timestamp_agg: 'desc' } },
+                },
+            },
+        });
+
+        const buckets = messagesResult.aggregations!.conversation_id_agg.buckets as estypes.AggregationsStringTermsBucketKeys[];
+        ids = buckets.map(b => b.key).filter(b => !!b);
+    }
 
     const query = {
         bool: {
@@ -394,13 +365,15 @@ async function getParticipantConversations(participant: string, excludeIds: stri
             },
             must_not: [
                 {
-                ids: {
-                    values: excludeIds,
-                }},
-                {exists: {
-                    field: "deletedAt"
-                }
-            }],
+                    ids: {
+                        values: excludeIds,
+                    }
+                },
+                {
+                    exists: {
+                        field: 'deletedAt'
+                    }
+                }],
         }
     }
 
@@ -409,16 +382,18 @@ async function getParticipantConversations(participant: string, excludeIds: stri
         from,
         size,
         sort: [
-            {_script: {
-                script: `${JSON.stringify(ids)}.indexOf(doc._id.value)`,
-                type: 'number',
-            }},
+            {
+                _script: {
+                    script: `int index = ${JSON.stringify(ids)}.indexOf(doc._id.value); index < 0 ? Integer.MAX_VALUE : index`,
+                    type: 'number',
+                }
+            },
             { createdAt: 'desc' },
             { _id: 'desc' },
         ],
         query,
-        aggs : {
-            total_count : { value_count : { field : "_id" } }
+        aggs: {
+            total_count: { value_count: { field: '_id' } }
         }
     });
 
@@ -426,11 +401,11 @@ async function getParticipantConversations(participant: string, excludeIds: stri
 
     var m = new Map(hits.map(i => [i.id, i]));
 
-    const conversations = ids.map(id => m.get(id) as Conversation).filter(c=>!!c);
-    
-    if(conversations.length < size) {
+    const conversations = ids.map(id => m.get(id) as Conversation).filter(c => !!c);
+
+    if (conversations.length < size) {
         const h = new Set(ids);
-        conversations.push(...hits.filter(c => !h.has(c.id)).slice(0, size - conversations.length));
+        conversations.push(...hits.filter(c => !h.has(c.id!)).slice(0, size - conversations.length));
     }
 
     return {
@@ -480,7 +455,7 @@ async function getPeerToPeerConversationId(peer1: string, peer2: string): Promis
                 },
                 must_not: {
                     exists: {
-                        field: "deletedAt"
+                        field: 'deletedAt'
                     }
                 },
             }
@@ -587,9 +562,9 @@ export async function initialize(config: Config): Promise<MessageStore> {
             mappings: {
                 dynamic: 'strict',
                 properties: {
-                    appId: { type: "keyword" },
-                    details: { type: "text" },
-                    timestamp: { type: "date" },
+                    appId: { type: 'keyword' },
+                    details: { type: 'text' },
+                    timestamp: { type: 'date' },
                 }
             }
         });
@@ -602,9 +577,9 @@ export async function initialize(config: Config): Promise<MessageStore> {
             mappings: {
                 dynamic: 'strict',
                 properties: {
-                    instanceId: { type: "keyword" },
-                    userId: { type: "keyword" },
-                    timestamp: { type: "date" },
+                    instanceId: { type: 'keyword' },
+                    userId: { type: 'keyword' },
+                    timestamp: { type: 'date' },
                 }
             }
         });
@@ -617,14 +592,13 @@ export async function initialize(config: Config): Promise<MessageStore> {
             mappings: {
                 dynamic: 'strict',
                 properties: {
-                    clientConversationId: { type: "keyword" },
-                    title: { type: "text" },
-                    participants: { type: "keyword" },
-                    createdBy: { type: "keyword" },
-                    createdAt: { type: "date" },
-                    updatedAt: { type: "date" },
-                    closedAt: { type: "date" },
-                    deletedAt: { type: "date" },
+                    title: { type: 'text' },
+                    participants: { type: 'keyword' },
+                    createdBy: { type: 'keyword' },
+                    createdAt: { type: 'date' },
+                    updatedAt: { type: 'date' },
+                    closedAt: { type: 'date' },
+                    deletedAt: { type: 'date' },
                 }
             }
         });
@@ -637,7 +611,7 @@ export async function initialize(config: Config): Promise<MessageStore> {
             mappings: {
                 dynamic: 'strict',
                 properties: {
-                    conversationId: { type: "keyword" },
+                    conversationId: { type: 'keyword' },
                 }
             }
         });
@@ -650,36 +624,29 @@ export async function initialize(config: Config): Promise<MessageStore> {
             mappings: {
                 dynamic: 'strict',
                 properties: {
-                    type: { type: "keyword" },
-                    conversationId: { type: "keyword" },
-                    participants: { type: "keyword" },
-                    fromConnectionId: { type: "keyword" },
-                    fromId: { type: "keyword" },
-                    clientMessageId: { type: "keyword" },
-                    createdAt: { type: "date_nanos" },
-                    updatedAt: { type: "date" },
-                    deletedAt: { type: "date" },
+                    type: { type: 'keyword' },
+                    conversationId: { type: 'keyword' },
+                    participants: { type: 'keyword' },
+                    connectionId: { type: 'keyword' },
+                    fromId: { type: 'keyword' },
+                    clientMessageId: { type: 'keyword' },
+                    createdAt: { type: 'date_nanos' },
+                    updatedAt: { type: 'date' },
+                    deletedAt: { type: 'date' },
                     data: {
                         dynamic: 'strict',
                         properties: {
-                            messageId: { type: "keyword" },
-                            title: { type: "text", index: false },
-                            participants: { type: "keyword", index: false },
-                            data: {
-                                dynamic: 'strict',
-                                properties: {
-                                    text: { type: "text", index: false },
-                                    link: { type: "keyword", index: false },
-                                    name: { type: "keyword", index: false },
-                                    type: { type: "keyword", index: false },
-                                    size: { type: "long", index: false },
-                                }
-                            },
-                            text: { type: "text" },
-                            link: { type: "keyword" },
-                            name: { type: "keyword" },
-                            type: { type: "keyword" },
-                            size: { type: "long" },
+                            conversationId: { type: 'keyword' },
+                            closedAt: { type: 'date', index: false  },
+                            deletedAt: { type: 'date', index: false  },
+                            participants: { type: 'keyword', index: false },
+                            title: { type: 'text', index: false },
+                            messageId: { type: 'keyword' },
+                            text: { type: 'text', index: false  },
+                            link: { type: 'keyword', index: false  },
+                            name: { type: 'keyword', index: false  },
+                            type: { type: 'keyword', index: false  },
+                            size: { type: 'long', index: false  },
                         }
                     }
                 }
@@ -689,7 +656,6 @@ export async function initialize(config: Config): Promise<MessageStore> {
 
     return {
         findMessages,
-        getConversationByCreatorId,
         getConversationById,
         getLastMessagesTimestamps,
         getParticipantConversationById,

@@ -51,7 +51,7 @@ export async function initialize(config: Config): Promise<MessageQueue> {
             instanceId: deserialized.instanceId?.toString(),
             conversationId: deserialized.conversationId?.toString(),
             participants: Array.isArray(deserialized.participants) ? deserialized.participants : undefined,
-            fromConnectionId: deserialized.fromConnectionId?.toString(),
+            connectionId: deserialized.connectionId?.toString(),
             fromId: deserialized.fromId?.toString(),
             data: typeof deserialized.data === 'object' ? deserialized.data : null,
             createdAt: new Date(deserialized.createdAt),

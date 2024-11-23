@@ -1,6 +1,9 @@
 export interface ConversationUpdate {
+    conversationId?: string
     title?: string
     participants?: string[]
+    closedAt?: Date
+    deletedAt?: Date
 }
 
 export interface FileMessage {
@@ -18,12 +21,11 @@ export interface MessageDelete {
     messageId: string
 }
 
-export interface MessageUpdate {
+export interface MessageUpdate extends Partial<FileMessage>, Partial<TextMessage> {
     messageId: string
-    data?: FileMessage | TextMessage
 }
 
-export type MessageType = 'connected' | 'disconnected' | 'joined' | 'left' | 'closed' | 'deleted' | 'updated' | 'message-updated' | 'message-deleted' | 'text' | 'file'
+export type MessageType = 'connected' | 'disconnected' | 'joined' | 'left' | 'closed' | 'deleted' | 'loaded' | 'updated' | 'message-updated' | 'message-deleted' | 'text' | 'file'
 
 export type MessageData = ConversationUpdate | FileMessage | MessageDelete | MessageUpdate | TextMessage | null
 
@@ -34,7 +36,7 @@ export interface Message {
     instanceId: string
     conversationId?: string
     participants?: string[]
-    fromConnectionId: string
+    connectionId: string
     fromId: string
     data: MessageData
     createdAt: Date

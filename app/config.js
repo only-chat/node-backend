@@ -56,5 +56,3 @@ export const host = 'localhost';
 export const port = 9000;
 
 export const wsPingInterval = 30000;
-
-export const watchConversationId = '@watch';

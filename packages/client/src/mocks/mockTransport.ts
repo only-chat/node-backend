@@ -48,19 +48,43 @@ export class MockTransport implements Transport {
         return p;
     }
 
+    sendToClientToClose(data: string): Promise<{ code?: number, data?: string | Buffer }> {
+        if (this.closedByClient || this.readyState !== TransportState.OPEN) {
+            throw new Error('Method not implemented.');
+        }
+
+        const p = new Promise<{ code?: number, data?: string | Buffer }>((resolve, reject) => {
+            this.closeResolve = resolve;
+            this.closeReject = reject;
+        });
+
+        this.messageListeners.forEach(l => l(Buffer.from(data), false));
+        return p;
+    }
+
     closeToClient(data?: string): Promise<{ code?: number, data?: string | Buffer }> {
+        if (this.readyState >= TransportState.CLOSING) {
+            return Promise.resolve({ code: 1000, data });
+        }
+
         const p = new Promise<{ code?: number, data?: string | Buffer }>((resolve, reject) => {
             this.closeResolve = resolve;
             this.closeReject = reject;
         });
 
         this.closeListeners.forEach(l => l(data, false));
-        this.closeListeners = [];
-        this.readyState = TransportState.CLOSED;
         return p;
     };
 
     close(code?: number, data?: string | Buffer): void {
+        if (this.readyState >= TransportState.CLOSING) {
+            return;
+        }
+
+        this.messageListeners = [];
+        this.closeListeners.forEach(l => l(data, false));
+        this.closeListeners = [];
+        this.readyState = TransportState.CLOSED;
         this.closedByClient = true;
         if (this.closeResolve) {
             this.closeResolve({ code, data });
@@ -89,6 +113,7 @@ export class MockTransport implements Transport {
     addListener<K>(eventName: string | symbol, listener: (...args: any[]) => void): this {
         throw new Error('Method not implemented.');
     }
+
     on<K>(eventName: string | symbol, listener: (...args: any[]) => void): this {
 
         switch (eventName) {
@@ -99,6 +124,7 @@ export class MockTransport implements Transport {
 
         throw new Error('Method not implemented.');
     }
+
     once<K>(eventName: string | symbol, listener: (...args: any[]) => void): this {
         switch (eventName) {
             case 'close':
@@ -107,41 +133,53 @@ export class MockTransport implements Transport {
         }
         throw new Error('Method not implemented.');
     }
+
     removeListener<K>(eventName: string | symbol, listener: (...args: any[]) => void): this {
         throw new Error('Method not implemented.');
     }
+
     off<K>(eventName: string | symbol, listener: (...args: any[]) => void): this {
         throw new Error('Method not implemented.');
     }
+
     removeAllListeners(eventName?: string | symbol | undefined): this {
         this.messageListeners = [];
         this.closeListeners = [];
         return this;
     }
+
     setMaxListeners(n: number): this {
         throw new Error('Method not implemented.');
     }
+
     getMaxListeners(): number {
         throw new Error('Method not implemented.');
     }
+
     listeners<K>(eventName: string | symbol): Array<Function> {
         throw new Error('Method not implemented.');
     }
+
     rawListeners<K>(eventName: string | symbol): Array<Function> {
         throw new Error('Method not implemented.');
     }
+
     emit<K>(eventName: string | symbol, ...args: any[]): boolean {
         throw new Error('Method not implemented.');
     }
+
     listenerCount<K>(eventName: string | symbol, listener?: Function | undefined): number {
         throw new Error('Method not implemented.');
     }
+
     prependListener<K>(eventName: string | symbol, listener: (...args: any[]) => void): this {
         throw new Error('Method not implemented.');
     }
+
     prependOnceListener<K>(eventName: string | symbol, listener: (...args: any[]) => void): this {
         throw new Error('Method not implemented.');
     }
+
     eventNames(): Array<(string | symbol) & (string | symbol)> {
         throw new Error('Method not implemented.');
     }
