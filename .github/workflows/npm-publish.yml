@@ -17,25 +17,25 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
       - run: npm ci --prefix ./packages/types
       - run: npm publish ./packages/types --provenance --access public
-      - run: npm ci --prefix ./packages/stores/elasticsearch
+      - run: npm install ./packages/stores/elasticsearch
       - run: npm run build --prefix ./packages/stores/elasticsearch
       - run: npm publish ./packages/stores/elasticsearch --provenance --access public
-      - run: npm ci --prefix ./packages/stores/memory
+      - run: npm install ./packages/stores/memory
       - run: npm run build --prefix ./packages/stores/memory
       - run: npm publish ./packages/stores/memory --provenance --access public
-      - run: npm ci --prefix ./packages/user-stores/elasticsearch
+      - run: npm install ./packages/user-stores/elasticsearch
       - run: npm run build --prefix ./packages/user-stores/elasticsearch
       - run: npm publish ./packages/user-stores/elasticsearch --provenance --access public
-      - run: npm ci --prefix ./packages/user-stores/memory
+      - run: npm install ./packages/user-stores/memory
       - run: npm run build --prefix ./packages/user-stores/memory
       - run: npm publish ./packages/stuser-storesores/memory --provenance --access public
-      - run: npm ci --prefix ./packages/queues/rabbitmq
+      - run: npm install ./packages/queues/rabbitmq
       - run: npm run build --prefix ./packages/queues/rabbitmq
       - run: npm publish ./packages/queues/rabbitmq --provenance --access public
-      - run: npm ci --prefix ./packages/queues/memory
+      - run: npm install ./packages/queues/memory
       - run: npm run build --prefix ./packages/queues/memory
       - run: npm publish ./packages/queues/memory --provenance --access public
-      - run: npm ci --prefix ./packages/client
+      - run: npm install ./packages/client
       - run: npm run build --prefix ./packages/client
       - run: npm publish ./packages/client --provenance --access public
         env:
