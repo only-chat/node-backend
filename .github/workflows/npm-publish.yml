@@ -15,28 +15,36 @@ jobs:
         with:
           node-version: '20.x'
           registry-url: 'https://registry.npmjs.org'
-      - run: npm ci --prefix ./packages/types
-      - run: npm publish ./packages/types --provenance --access public
-      - run: npm ci --prefix ./packages/stores/elasticsearch
-      - run: npm run build --prefix ./packages/stores/elasticsearch
-      - run: npm publish ./packages/stores/elasticsearch --provenance --access public
-      - run: npm ci --prefix ./packages/stores/memory
-      - run: npm run build --prefix ./packages/stores/memory
-      - run: npm publish ./packages/stores/memory --provenance --access public
-      - run: npm ci --prefix ./packages/user-stores/elasticsearch
-      - run: npm run build --prefix ./packages/user-stores/elasticsearch
-      - run: npm publish ./packages/user-stores/elasticsearch --provenance --access public
-      - run: npm ci --prefix ./packages/user-stores/memory
-      - run: npm run build --prefix ./packages/user-stores/memory
-      - run: npm publish ./packages/stuser-storesores/memory --provenance --access public
-      - run: npm ci --prefix ./packages/queues/rabbitmq
-      - run: npm run build --prefix ./packages/queues/rabbitmq
-      - run: npm publish ./packages/queues/rabbitmq --provenance --access public
-      - run: npm ci --prefix ./packages/queues/memory
-      - run: npm run build --prefix ./packages/queues/memory
-      - run: npm publish ./packages/queues/memory --provenance --access public
-      - run: npm ci --prefix ./packages/client
-      - run: npm run build --prefix ./packages/client
-      - run: npm publish ./packages/client --provenance --access public
+      - run: cd ./packages/types
+      - run: npm ci
+      - run: npm publish --provenance --access public
+      - run: cd ../stores/elasticsearch
+      - run: npm install
+      - run: npm run build
+      - run: npm publish --provenance --access public
+      - run: cd ../memory
+      - run: npm install
+      - run: npm run build
+      - run: npm publish --provenance --access public
+      - run: cd ../../user-stores/elasticsearch
+      - run: npm install
+      - run: npm run build
+      - run: npm publish --provenance --access public
+      - run: cd ../memory
+      - run: npm install
+      - run: npm run build
+      - run: npm publish --provenance --access public
+      - run: cd ../../queues/rabbitmq
+      - run: npm install
+      - run: npm run build
+      - run: npm publish --provenance --access public
+      - run: cd ../memory
+      - run: npm install
+      - run: npm run build
+      - run: npm publish --provenance --access public
+      - run: cd ../../client
+      - run: npm install
+      - run: npm run build
+      - run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
