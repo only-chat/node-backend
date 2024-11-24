@@ -1,5 +1,5 @@
 import type { AuthenticationInfo, UserStore } from '@only-chat/types/userStore.js';
-import type { Conversation, ConversationUpdate, ConversationsResult, FileMessage, FindRequest, FindResult, LoadRequest, Message, MessageData, MessageDelete, MessageStore, MessageType, MessageUpdate } from '@only-chat/types/store.js';
+import type { Conversation, ConversationUpdate, ConversationsResult, FileMessage, FindRequest, FindResult, Message as StoreMessage, MessageDelete, MessageStore, MessageData, MessageType as StoreMessageType, MessageUpdate, TextMessage } from '@only-chat/types/store.js';
 import type { Log } from '@only-chat/types/log.js';
 import type { Message as QueueMessage, MessageData as QueueMessageData, MessageQueue, MessageType as QueueMessageType } from '@only-chat/types/queue.js';
 import type { Transport } from '@only-chat/types/transport.js';
@@ -20,20 +20,40 @@ export interface Config {
     store: MessageStore;
     userStore: UserStore;
     instanceId: string;
-    watchConversationId?: string;
+}
+
+export interface LoadRequest {
+    from?: number
+    size?: number
+    excludeIds?: string[]
+    before?: Date
+}
+
+interface JoinRequest {
+    conversationId?: string;
+    title?: string;
+    messagesSize?: number;
+    participants?: string[];
+}
+
+type RequestType = 'join' | 'watch' | 'close' | 'delete' | 'update' | 'load' | 'load-messages' | 'message-update' | 'message-delete' | 'find' | QueueMessageType;
+
+type RequestData = FindRequest | JoinRequest | LoadRequest | QueueMessageData;
+
+interface Request {
+    type: RequestType;
+    clientMessageId?: string;
+    data: RequestData;
+}
+
+interface ConnectRequest {
+    authInfo: AuthenticationInfo;
+    conversationsSize?: number;
 }
 
 interface ConversationInfo {
     participants: Set<string>;
     clients: WsClient[];
-}
-
-interface JoinRequest {
-    type: string;
-    clientConversationId?: string;
-    participants?: string[];
-    conversationId?: string;
-    conversationTitle?: string;
 }
 
 export enum WsClientState {
@@ -45,17 +65,19 @@ export enum WsClientState {
     Disconnected = 0xFF,
 }
 
-const sendStates = [WsClientState.Session, WsClientState.WatchSession];
+const defaultSize = 100;
 
-const types: MessageType[] = ['file', 'text'];
+const sendStates = [WsClientState.Connected, WsClientState.Session, WsClientState.WatchSession];
+
+const connectedRequestTypes: RequestType[] = ['close', 'delete', 'load', 'update'];
+
+const types: StoreMessageType[] = ['file', 'text'];
 
 let instanceId: string = undefined!;
 let logger: Log | undefined;
 let queue: MessageQueue = undefined!;
 let store: MessageStore = undefined!;
 let userStore: UserStore = undefined!;
-let watchConversationId: string | undefined;
-
 
 export class WsClient {
     // These members are public for testing purposes only
@@ -270,10 +292,10 @@ export class WsClient {
             }
 
             WsClient.publishToWatchList(qm.fromId, wc => {
-                if (qm.fromConnectionId !== wc.connectionId || qm.instanceId !== instanceId) {
+                if (qm.connectionId !== wc.connectionId || qm.instanceId !== instanceId) {
                     wc.send({
                         id: qm.id,
-                        fromConnectionId: qm.fromConnectionId,
+                        connectionId: qm.connectionId,
                         fromId: qm.fromId,
                         type: qm.type,
                         createdAt: qm.createdAt,
@@ -284,43 +306,31 @@ export class WsClient {
             return;
         }
 
-        if (!qm.conversationId) {
-            return;
-        }
-        
-        const msg: Message = {
-            id: qm.id,
-            conversationId: qm.conversationId,
-            participants: qm.participants ?? [],
-            fromConnectionId: qm.fromConnectionId,
-            fromId: qm.fromId,
-            type: qm.type,
-            clientMessageId: qm.clientMessageId,
-            data: qm.data,
-            createdAt: qm.createdAt,
-            updatedAt: qm.updatedAt,
-        }
+        if (['closed', 'deleted'].includes(qm.type)) {
+            const conversationId = (qm.data as ConversationUpdate).conversationId ?? qm.conversationId;
+            if (conversationId) {
+                await WsClient.publishToWsList(conversationId, async (wc, _) => {
+                    if (qm.connectionId !== wc.connectionId || qm.instanceId !== instanceId) {
+                        wc.send(qm);
+                    }
 
-        if (['closed', 'deleted'].includes(msg.type)) {
-            await WsClient.publishToWsList(msg.conversationId, async (wc, _) => {
-                wc.send(msg);
+                    if (wc.conversation?.id === conversationId && qm.type === 'deleted') {
+                        await wc.stop('Deleted');
+                    }
+                });
 
-                if (wc.conversation?.id === msg.conversationId && msg.type === 'deleted') {
-                    await wc.stop('Deleted');
+                if (qm.type === 'deleted') {
+                    WsClient.conversationsCache.delete(conversationId!);
                 }
-            });
-
-            if (msg.type === 'deleted') {
-                WsClient.conversationsCache.delete(msg.conversationId);
             }
 
             return;
         }
 
-        switch (msg.type) {
+        switch (qm.type) {
             case 'text':
             case 'file':
-                if (null === msg.data) {
+                if (null === qm.data) {
                     break;
                 }
             /* FALLTHROUGH */
@@ -328,48 +338,48 @@ export class WsClient {
             case 'left':
             case 'message-updated':
             case 'message-deleted':
-                {
+                if (qm.conversationId) {
                     const ids: string[] = [];
-                    await WsClient.publishToWsList(msg.conversationId, async (wc, _) => {
-                        wc.send(msg);
+                    await WsClient.publishToWsList(qm.conversationId, async (wc, _) => {
+                        wc.send(qm);
                     }, ids);
                 }
                 break;
 
             case 'updated':
                 {
-                    const updated = await WsClient.syncConversation(msg.conversationId);
+                    const conversationId = (qm.data as ConversationUpdate).conversationId ?? qm.conversationId;
 
-                    await WsClient.publishToWsList(msg.conversationId, async (wc, participants) => {
-                        wc.send(msg);
+                    if (conversationId) {
+                        const updated = await WsClient.syncConversation(conversationId);
 
-                        if (updated && false === participants?.has(wc.id!)) {
-                            await wc.stop('Removed');
-                        }
-                    });
+                        await WsClient.publishToWsList(conversationId, async (wc, participants) => {
+                            wc.send(qm);
+
+                            if (updated && false === participants?.has(wc.id!)) {
+                                await wc.stop('Removed');
+                            }
+                        });
+                    }
                 }
                 break;
         }
     }
 
-    private async publishMessage(type: MessageType, clientMessageId: string | undefined, data: MessageData, save: boolean): Promise<boolean> {
+    private async publishMessage(type: QueueMessageType, clientMessageId: string | undefined, data: RequestData, save: boolean): Promise<boolean> {
         let id: string | undefined = undefined;
         const createdAt = new Date();
 
         if (save) {
-            if (!this.conversation?.id) {
-                throw new Error('Failed publishMessage');
-            }
-
-            const m: Message = {
-                type,
-                conversationId: this.conversation.id,
-                participants: this.conversation.participants,
-                fromConnectionId: this.connectionId!,
+            const m: StoreMessage = {
+                type: type as StoreMessageType,
+                conversationId: this.conversation?.id,
+                participants: this.conversation?.participants,
+                connectionId: this.connectionId!,
                 clientMessageId: clientMessageId,
                 fromId: this.id!,
                 createdAt,
-                data: data,
+                data: data as MessageData,
             };
 
             const response = await store.saveMessage(m);
@@ -383,12 +393,12 @@ export class WsClient {
 
         if (!Array.isArray(queue.acceptTypes) || (queue.acceptTypes as string[]).includes(type)) {
             return await queue.publish({
-                type: type as QueueMessageType,
+                type,
                 id,
                 instanceId,
                 conversationId: this.conversation?.id,
                 participants: this.conversation?.participants,
-                fromConnectionId: this.connectionId!,
+                connectionId: this.connectionId!,
                 fromId: this.id!,
                 clientMessageId: clientMessageId,
                 createdAt,
@@ -405,51 +415,50 @@ export class WsClient {
         }
     }
 
-    private async stop(statusDescription = 'Stopped') {
-        try {
-            if (this.state === WsClientState.Disconnected) {
-                return;
-            }
-
-            if (this.lastError) {
-                statusDescription += '. ' + this.lastError;
-            }
-
-            if (TransportState.CLOSED !== this.transport.readyState && TransportState.CLOSING !== this.transport.readyState) {
-                if (statusDescription.length > 123) {
-                    statusDescription = statusDescription.substring(0, 123);
-                }
-
-                this.transport.close(1000, statusDescription);
-            }
-
-            this.transport.removeAllListeners();
-
-            this.state = WsClientState.Disconnected;
-
-            if (this.connectionId && this.id) {
-                if (this.conversation) {
-                    await this.publishMessage('left', undefined, null, true);
-                    delete this.conversation;
-                }
-
-                await this.publishMessage('disconnected', undefined, null, false);
-            }
+    private async stop(statusDescription: string, err?: any) {
+        if(logger && err?.message) {
+            logger.error(err.message);
         }
-        catch (e: any) {
-            if (!this.lastError) {
-                this.lastError += ' ' + e.Message;
-            }
-            else {
-                this.lastError = e.Message;
-            }
+
+        if (this.state === WsClientState.Disconnected) {
+            return;
         }
+
+        this.state = WsClientState.Disconnected;
+
+        const maxStatusLen = 123;
+        const dotSpace = '. ';
+
+        [this.lastError, err?.message].forEach(v => {
+            if (v && statusDescription.length + dotSpace.length < maxStatusLen) {
+                statusDescription += dotSpace + v.substring(0, maxStatusLen - statusDescription.length - dotSpace.length);
+            }
+        });
+
+        if (this.connectionId && this.id) {
+            if (this.conversation) {
+                await this.publishMessage('left', undefined, null, true);
+            }
+
+            await this.publishMessage('disconnected', undefined, null, false);
+        }
+
+        if ([TransportState.CLOSING, TransportState.CLOSED].includes(this.transport.readyState)) {
+            return;
+        }
+
+        if (statusDescription.length > maxStatusLen) {
+            statusDescription = statusDescription.substring(0, maxStatusLen);
+        }
+
+        this.transport.close(err ? 1011 : 1000, statusDescription);
+        this.transport.removeAllListeners();
     }
 
     private async watch(): Promise<void> {
         this.state = WsClientState.WatchSession;
 
-        const conversations = await this.getConversations();
+        const conversations = await this.getConversations(0, 0);
 
         WsClient.addWatchClient(this);
 
@@ -458,18 +467,20 @@ export class WsClient {
         logger?.debug(`Watch client with id ${this.id} added successfully`);
     }
 
-    private async join(request: JoinRequest): Promise<boolean> {
+    private async join(request: Request): Promise<boolean> {
         let conversation: Conversation | undefined;
         let created = false;
 
-        if (request.conversationId) {
-            conversation = await store.getParticipantConversationById(this.id, request.conversationId);
+        const data = request.data as JoinRequest;
+
+        if (data.conversationId) {
+            conversation = await store.getParticipantConversationById(this.id, data.conversationId);
             if (!conversation?.id) {
                 this.lastError = "Wrong conversation";
                 return false;
             }
         } else {
-            const participants = new Set<string>(request.participants?.map(p => p.trim()).filter(s => s.length));
+            const participants = new Set<string>(data.participants?.map(p => p.trim()).filter(s => s.length));
             participants.add(this.id!);
 
             if (participants.size < 2) {
@@ -481,7 +492,7 @@ export class WsClient {
 
             const participantsArray = Array.from(participants);
 
-            if (!request.conversationTitle && participants.size == 2) {
+            if (!data.title && participants.size == 2) {
                 conversationId = await store.getPeerToPeerConversationId(participantsArray[0], participantsArray[1]);
                 if (!conversationId) {
                     this.lastError = 'Unable to get peer to peer conversation identifier';
@@ -490,7 +501,7 @@ export class WsClient {
                 }
 
                 conversation = await store.getConversationById(conversationId);
-            } else if (!request.conversationTitle) {
+            } else if (!data.title) {
                 this.lastError = "Conversation title required";
                 return false;
             }
@@ -505,9 +516,8 @@ export class WsClient {
 
                 conversation = {
                     id: conversationId,
-                    clientConversationId: conversation?.clientConversationId || request.clientConversationId,
                     participants: participantsArray,
-                    title: conversation?.title || request.conversationTitle,
+                    title: conversation?.title || data.title,
                     createdBy: conversation?.createdBy || this.id!,
                     updatedAt: conversation?.createdAt ? now : undefined,
                     createdAt: conversation?.createdAt || now,
@@ -533,11 +543,13 @@ export class WsClient {
 
         await WsClient.addClient(conversation!, this);
 
-        let lastMessage: Message | undefined = undefined;
+        const size = data.messagesSize != null && data.messagesSize >= 0 ? data.messagesSize : defaultSize;
+
+        let lastMessage: StoreMessage | undefined = undefined;
         let oldMessages: FindResult | undefined = undefined;
         if (!created) {
             const fr: FindRequest = {
-                size: 0,
+                size,
                 conversationIds: [conversation!.id!],
                 types,
                 sort: 'createdAt',
@@ -552,6 +564,7 @@ export class WsClient {
 
         const joined = {
             type: 'conversation',
+            clientMessageId: request.clientMessageId,
             conversation,
             connected,
             messages: oldMessages?.messages.reverse(),
@@ -564,7 +577,7 @@ export class WsClient {
 
         logger?.debug(`Client with id ${this.id} added successfully`);
 
-        return this.publishMessage('joined', undefined, null, true);
+        return this.publishMessage('joined', request.clientMessageId, null, true);
     }
 
     private onMessage(data: Buffer, isBinary: boolean) {
@@ -577,54 +590,72 @@ export class WsClient {
                 throw new Error('Binary message received!');
             }
 
+            if (sendStates.includes(this.state)) {
+                const msg: Request = JSON.parse(data.toString());
+
+                if (connectedRequestTypes.includes(msg.type)) {
+                    this.processRequest(msg).then(result => {
+                        if (!result) {
+                            this.stop('Failed processRequest');
+                        }
+                    }).catch(e => {
+                        this.stop('Failed processRequest', e);
+                    });
+
+                    return;
+                }
+            }
+
             switch (this.state) {
                 case WsClientState.None:
                     {
-                        const authInfo: AuthenticationInfo = JSON.parse(data.toString());
-                        this.connect(authInfo).then(response => {
+                        const request: ConnectRequest = JSON.parse(data.toString());
+                        this.connect(request).then(response => {
                             if (!response) {
-                                this.stop('Not connected');
+                                this.stop('Failed connect');
                             }
                         }).catch(e => {
-                            this.lastError = e.message;
-                            this.stop('Not connected');
+                            this.stop('Failed connect', e);
                         });
                     }
                     break;
                 case WsClientState.Connected:
                     {
-                        const request: JoinRequest = JSON.parse(data.toString());
+                        const request: Request = JSON.parse(data.toString());
 
-                        if (request.type !== 'join') {
-                            throw new Error('Wrong join');
-                        }
-
-                        if (watchConversationId && request.conversationId === watchConversationId) {
-                            this.watch().catch(e => this.stop('Failed watch'));
-                        }
-                        else {
-                            this.join(request).then(response => {
-                                if (!response) {
-                                    this.stop('Not joined');
-                                }
-                            }).catch(e => {
-                                this.lastError = e.message;
-                                this.stop('Not joined');
-                            });
+                        switch (request.type) {
+                            case 'join':
+                                this.join(request).then(response => {
+                                    if (!response) {
+                                        this.stop('Failed join');
+                                    }
+                                }).catch(e => {
+                                    this.stop('Failed join', e);
+                                });
+                                break;
+                            case 'watch':
+                                this.watch().catch(e => {
+                                    this.stop('Failed watch', e);
+                                });
+                                break;
+                            default:
+                                throw new Error('Wrong request type');
                         }
                     }
                     break;
                 case WsClientState.Session:
                 case WsClientState.WatchSession:
                     {
-                        const msg: Message = JSON.parse(data.toString());
+                        const request: Request = JSON.parse(data.toString());
 
-                        if (msg) {
-                            this.processMessage(msg).then(result => {
-                                if (false === result) {
-                                    throw new Error('Failed processMessage');
+                        if (request) {
+                            this.processConversationRequest(request).then(result => {
+                                if (!result) {
+                                    this.stop('Failed processConversationRequest');
                                 }
-                            }).catch(e => this.stop(e.message));
+                            }).catch(e => {
+                                this.stop('Failed processConversationRequest', e);
+                            });
                         } else {
                             this.stop('Wrong message');
                         }
@@ -635,24 +666,27 @@ export class WsClient {
             }
         }
         catch (e: any) {
-            this.stop(e.message);
+            this.stop('Failed message processing', e);
         }
     }
 
     private onClose() {
-        if (this.conversation?.id) {
-            WsClient.removeClient(this.conversation.id, this);
-            logger?.debug(`Client with id ${this.id} removed successfully`);
-            this.stop();
-        }
-        else if (WsClientState.WatchSession === this.state) {
-            WsClient.removeWatchClient(this);
-            logger?.debug(`Watch client with id ${this.id} removed successfully`);
-        }
+        this.stop('Stopped').finally(() => {
+
+            if (this.conversation?.id) {
+                WsClient.removeClient(this.conversation.id, this);
+                logger?.debug(`Client with id ${this.id} removed successfully`);
+            }
+            else if (WsClientState.WatchSession === this.state) {
+                WsClient.removeWatchClient(this);
+                logger?.debug(`Watch client with id ${this.id} removed successfully`);
+            }
+
+            delete this.conversation;
+        });
     }
 
     private async deleteMessage(request: MessageDelete): Promise<boolean> {
-
         const findResult = await store.findMessages({
             ids: [request.messageId],
             conversationIds: [this.conversation!.id!],
@@ -681,7 +715,6 @@ export class WsClient {
     }
 
     private async updateMessage(request: MessageUpdate): Promise<boolean> {
-
         const findResult = await store.findMessages({
             ids: [request.messageId],
             conversationIds: [this.conversation!.id!],
@@ -701,11 +734,12 @@ export class WsClient {
 
         switch (message.type) {
             case 'file':
-                const { link, name, type, size } = request;
+                const { link, name, type, size } = request as FileMessage;
                 message.data = { link, name, type, size };
                 break;
             case 'text':
-                message.data = { text: request.text };
+                const { text } = request as TextMessage;
+                message.data = { text };
                 break;
         }
 
@@ -724,22 +758,22 @@ export class WsClient {
         return true;
     }
 
-    private async updateConversation(request: ConversationUpdate): Promise<boolean> {
-        const conversation = this.conversation!;
+    private async updateConversation(data: ConversationUpdate): Promise<boolean> {
+        const conversation = data.conversationId ? await store.getConversationById(data.conversationId) : this.conversation;
 
-        if (this.id !== conversation.createdBy) {
+        if (!conversation || this.id !== conversation.createdBy) {
             //Only creator can update conversation
             this.lastError = 'User is not allowed to update conversation';
             return false;
         }
 
-        conversation.title = request?.title;
+        conversation.title = data.title;
 
         conversation.updatedAt = new Date();
 
         const participants = new Set([conversation.createdBy]);
 
-        request?.participants?.forEach(p => participants.add(p));
+        data.participants?.forEach(p => participants.add(p));
 
         conversation.participants = Array.from(participants);
 
@@ -756,22 +790,56 @@ export class WsClient {
         return true;
     }
 
-    private async closeDeleteConversation(del: boolean): Promise<boolean | null> {
-        if (!this.conversation?.id) {
-            return false;
+    private async closeDeleteConversation(data: ConversationUpdate, del: boolean): Promise<QueueMessageType | null> {
+        const id = data.conversationId ?? this.conversation?.id;
+        if (!id) {
+            this.lastError = 'Wrong conversation identifier';
+            return null;
         }
 
-        const conversation = await store.getConversationByCreatorId(this.id!, this.conversation.id);
+        const conversation = await store.getConversationById(id);
 
         if (!conversation) {
-            return false;
+            //Only creator can close or delete conversation
+            this.lastError = 'Conversation not found';
+            return null;
         }
 
-        const now = new Date();
-        conversation.closedAt = now;
+        if (!del && conversation.closedAt) {
+            this.lastError = 'Conversation already closed';
+            return null;
+        }
 
-        if (del) {
-            conversation.deletedAt = now;
+        if (conversation.deletedAt) {
+            this.lastError = 'Conversation already deleted';
+            return null;
+        }
+
+        let type: QueueMessageType = 'updated';
+
+        if (this.id === conversation.createdBy) {
+            //Only creator can close or delete conversation
+            conversation.closedAt = data.closedAt;
+
+            if (del) {
+                conversation.deletedAt = data.deletedAt;
+                type = 'deleted';
+            } else {
+                type = 'closed';
+            }
+        } else if (del) {
+            //leave conversation
+            const count = conversation.participants.length;
+            conversation.participants = conversation.participants.filter(p => p !== this.id);
+            if (count === conversation.participants.length) {
+                this.lastError = 'User is not allowed to delete conversation';
+                return null;
+            }
+
+            data.participants = conversation.participants;
+        } else {
+            this.lastError = 'User is not allowed to close conversation';
+            return null;
         }
 
         const response = await store.saveConversation(conversation);
@@ -779,25 +847,66 @@ export class WsClient {
         if (response.result !== 'updated') {
             logger?.error(`Close conversation with id ${conversation.id} failed`);
             this.lastError = 'Close conversation failed';
-            return true;
+            return null;
         }
 
-        logger?.debug(`Conversation with id ${conversation.id} was closed successfully`);
+        logger?.debug(`Conversation with id ${conversation.id} was updated successfully`);
 
-        if (del) {
-            this.lastError = 'Conversation deleted';
-        }
-
-        return del ? true : null;
+        return type;
     }
 
-    private async processMessage(msg: Message): Promise<boolean | null> {
-        if (!msg.data && !['close', 'delete'].includes(msg.type)) {
+    private async processRequest(request: Request): Promise<boolean> {
+        if (!request.data) {
             this.lastError = 'Wrong message';
             return false;
         }
 
-        let data: MessageData = null, broadcast = false, save = false, result: boolean | null = null;
+        switch (request.type) {
+            case 'close':
+            case 'delete':
+                {
+                    const now = new Date();
+                    let data: ConversationUpdate = {
+                        conversationId: (request.data as ConversationUpdate).conversationId,
+                        closedAt: now,
+                    };
+
+                    const del = request.type === 'delete';
+                    if (del) {
+                        data.deletedAt = now;
+                    }
+
+                    let type: QueueMessageType | null = null;
+                    if (type = await this.closeDeleteConversation(data, del)) {
+
+                        this.send({ type, clientMessageId: request.clientMessageId, data });
+
+                        return this.publishMessage(type, request.clientMessageId, data, true)
+                    }
+                }
+                break;
+            case 'load':
+                await this.loadConversations(request.data as LoadRequest, request.clientMessageId);
+                return true;
+            case 'update':
+                if (await this.updateConversation(request.data as ConversationUpdate)) {
+                    const type: QueueMessageType = 'updated';
+
+                    this.send({ type, clientMessageId: request.clientMessageId, data: request.data });
+
+                    return this.publishMessage('updated', request.clientMessageId, request.data, true)
+                }
+                break;
+        }
+
+        return false;
+    }
+
+    private async processConversationRequest(request: Request): Promise<boolean> {
+        if (!request.data) {
+            this.lastError = 'Wrong message';
+            return false;
+        }
 
         const verifyConversation = () => {
             if (this.conversation!.closedAt) {
@@ -807,102 +916,55 @@ export class WsClient {
             return true;
         }
 
-        let broadcastType = msg.type;
+        let broadcastType = request.type as QueueMessageType;
 
-        switch (msg.type) {
+        switch (request.type) {
             case 'text':
                 if (!verifyConversation()) {
                     return false;
                 }
-
-                data = msg.data;
-                broadcast = !!data;
-                save = true;
                 break;
             case 'file':
                 if (!verifyConversation()) {
                     return false;
                 }
 
-                data = msg.data;
-
-                if (!(data as FileMessage).name) {
+                if (!(request.data as FileMessage).name) {
                     this.lastError = 'Wrong file name';
                     return false;
                 }
-
-                broadcast = !!data;
-                save = true;
                 break;
             case 'message-update':
-                data = msg.data;
-                broadcast = !!data && await this.updateMessage(data as MessageUpdate);
-                if (broadcast) {
-                    broadcastType = 'message-updated';
-                    save = true;
+                if (!await this.updateMessage(request.data as MessageUpdate)) {
+                    return false;
                 }
+
+                broadcastType = 'message-updated';
                 break;
             case 'message-delete':
-                data = msg.data;
-                broadcast = !!data && await this.deleteMessage((data as MessageDelete));
-                if (broadcast) {
-                    broadcastType = 'message-deleted';
-                    save = true;
+                if (!await this.deleteMessage(request.data as MessageDelete)) {
+                    return false;
                 }
-                break;
-            case 'update':
-                data = msg.data;
-                broadcast = !!data && await this.updateConversation(data as ConversationUpdate);
-                if (broadcast) {
-                    broadcastType = 'updated';
-                    (msg.data as ConversationUpdate).participants = this.conversation!.participants;
-                    save = true;
-                }
+
+                broadcastType = 'message-deleted';
                 break;
             case 'find':
-                data = msg.data as FindRequest;
-                await this.findMessages(data, msg.clientMessageId);
-                break;
-            case 'load':
-                data = msg.data as LoadRequest;
-                await this.loadConversations(data, msg.clientMessageId);
-                break;
+                await this.findMessages(request.data as FindRequest, request.clientMessageId);
+                return true;
             case 'load-messages':
-                data = msg.data as LoadRequest;
-                await this.loadMessages(data, msg.clientMessageId);
-                break;
-            case 'delete':
-                if (this.conversation!.deletedAt) {
-                    this.lastError = 'Conversation already deleted';
-                    return false;
-                }
-            /*fallbackthrough*/
-            case 'close':
-                if (msg.type !== 'delete' && this.conversation!.closedAt) {
-                    this.lastError = 'Conversation already closed';
-                    return false;
-                }
-                broadcast = false !== (result = await this.closeDeleteConversation(msg.type === 'delete'));
-                if (broadcast) {
-                    broadcastType = msg.type === 'delete' ? 'deleted' : 'closed';
-                    save = true;
-                }
-                // if current converation was deleted then close also current websocket
-                break;
+                await this.loadMessages(request.data as LoadRequest, request.clientMessageId);
+                return true;
             default:
                 this.lastError = 'Wrong message type';
                 return false;
         }
 
-        if (broadcast) {
-            return this.publishMessage(broadcastType, msg.clientMessageId, data, save);
-        }
-
-        return result;
+        return this.publishMessage(broadcastType, request.clientMessageId, request.data, true);
     }
 
-    private async connect(authInfo: AuthenticationInfo): Promise<boolean> {
-        this.id = await userStore.authenticate(authInfo);
+    private async connect(request: ConnectRequest): Promise<boolean> {
+
+        this.id = request?.authInfo && await userStore.authenticate(request.authInfo);
 
         if (!this.id) {
             this.lastError = 'Authentication failed';
@@ -924,7 +986,7 @@ export class WsClient {
 
         logger?.debug(`Save connection with id ${this.connectionId} succeeded`);
 
-        const conversations = await this.getConversations();
+        const conversations = await this.getConversations(0, request.conversationsSize);
 
         this.transport.send(JSON.stringify({
             type: 'connection',
@@ -936,18 +998,16 @@ export class WsClient {
         return this.publishMessage('connected', undefined, null, false);
     }
 
-    private async getConversations(from = 0, size = 100, excludeIds?: string[]): Promise<ConversationsResult> {
+    private async getConversations(from: number = 0, conversationsSize?: number, excludeIds?: string[]): Promise<ConversationsResult> {
+
+        const size = conversationsSize != null && conversationsSize >= 0 ? conversationsSize : defaultSize;
+
         const result = await store.getParticipantConversations(this.id!, excludeIds || [], from, size);
 
         const ids = result.conversations.map(c => c.id!);
 
         if (!ids?.length) {
-            return {
-                conversations: [],
-                from,
-                size,
-                total: 0,
-            };
+            return result;
         }
 
         const messagesInfo = await store.getLastMessagesTimestamps(this.id!, ids);
@@ -967,7 +1027,7 @@ export class WsClient {
     }
 
     private async findMessages(request: FindRequest, clientMessageId?: string): Promise<void> {
-        const result = await store.getParticipantConversations(this.id!, [], request.from || 0, request.size || 100);
+        const result = await store.getParticipantConversations(this.id!, [], request.from || 0, request.size || defaultSize);
 
         if (request.conversationIds?.length) {
             request.conversationIds = Array.from(new Set(result.conversations.map(c => c.id!).concat(request.conversationIds)));
@@ -1006,7 +1066,6 @@ export class WsClient {
     }
 
     private async loadConversations(request: LoadRequest, clientMessageId?: string): Promise<void> {
-
         const result = await this.getConversations(request.from, request.size, request.excludeIds);
 
         this.send({ type: 'loaded', clientMessageId, conversations: result.conversations, count: result.total });
@@ -1019,7 +1078,6 @@ export function initialize(config: Config, log?: Log) {
     queue = config.queue;
     store = config.store;
     userStore = config.userStore;
-    watchConversationId = config.watchConversationId;
 
     queue?.subscribe(WsClient.translateQueueMessage);
 }

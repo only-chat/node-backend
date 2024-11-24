@@ -113,24 +113,6 @@ async function findMessages(r: FindRequest): Promise<FindResult> {
     };
 }
 
-async function getConversationByCreatorId(createdBy: string, id: string): Promise<Conversation | undefined> {
-    const c = conversations.get(id);
-
-    if (!c) {
-        return undefined;
-    }
-
-    if (c.conversation.deletedAt) {
-        return undefined;
-    }
-
-    if (c.conversation.createdBy === createdBy) {
-        return undefined;
-    }
-
-    return c.conversation;
-}
-
 const getConversationById = getParticipantConversationById.bind(this, undefined);
 
 async function getLastMessagesTimestamps(participant: string, conversationId: string[]): Promise<ConversationLastMessages> {
@@ -311,13 +293,13 @@ async function saveConversation(c: Conversation): Promise<SaveResponse> {
 }
 
 async function saveMessage(m: Message): Promise<SaveResponse> {
-    const exists = m.id && messages.has(m.id) && conversations.has(m.conversationId);
+    const exists = m.id && messages.has(m.id) && conversations.has(m.conversationId || '');
 
     const _id = m.id ?? (++messageId).toString();
 
     messages.set(_id, {...m, id: _id});
 
-    conversations.get(m.conversationId)?.messages.push(m.id!);
+    conversations.get(m.conversationId || '')?.messages.push(m.id!);
 
     return {
         _id,
@@ -333,13 +315,17 @@ export async function saveInstance(): Promise<SaveResponse> {
 }
 
 export async function initialize(): Promise<MessageStore> {
+    connectionId = 0;
+    conversationId = 0;
+    instanceId = 0;
+    messageId = 0;
+
     conversations.clear();
     messages.clear();
     peerToPeerConversations.clear();
 
     return {
         findMessages,
-        getConversationByCreatorId,
         getConversationById,
         getLastMessagesTimestamps,
         getParticipantConversationById,

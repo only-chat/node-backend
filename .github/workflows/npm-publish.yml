@@ -1,0 +1,60 @@
+name: Publish Packages to npmjs
+on:
+  release:
+    types: [published]
+jobs:
+  publish-npm:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      # Setup .npmrc file to publish to npm
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          registry-url: 'https://registry.npmjs.org'
+      - working-directory: ./packages/types
+        run: |
+          npm ci
+          npm publish --provenance --access public
+      - working-directory: ./packages/stores/elasticsearch
+        run: |
+          sleep 30s
+          npm install
+          npm run build
+          npm publish --provenance --access public
+      - working-directory: ./packages/stores/memory
+        run: |
+          npm install
+          npm run build
+          npm publish --provenance --access public
+      - working-directory: ./packages/user-stores/elasticsearch
+        run: |
+          npm install
+          npm run build
+          npm publish --provenance --access public
+      - working-directory: ./packages/user-stores/memory
+        run: |
+          npm install
+          npm run build
+          npm publish --provenance --access public
+      - working-directory: ./packages/queues/rabbitmq
+        run: |
+          npm install
+          npm run build
+          npm publish --provenance --access public
+      - working-directory: ./packages/queues/memory
+        run: |
+          npm install
+          npm run build
+          npm publish --provenance --access public
+      - working-directory: ./packages/client
+        run: |
+          sleep 30s
+          npm install
+          npm run build
+          npm publish --provenance --access public
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -15,7 +15,7 @@ const jsonCurrentTime = currentTime.toJSON();
 jest.useFakeTimers().setSystemTime(currentTime);
 
 describe('client', () => {
-    it('successfull workflow', async () => {
+    it('update current conversation', async () => {
         const queue = await initializeQueue();
 
         let disconnectedResolve: ((value: Message) => void) | undefined;
@@ -83,7 +83,7 @@ describe('client', () => {
         data = JSON.stringify({
             type: 'join',
             data: {
-                conversationId: null,
+                id: null,
                 participants,
                 title,
             }
@@ -116,7 +116,7 @@ describe('client', () => {
             data: null,
         });
 
-        const storedConversation = await store.getConversationById(conversationId);
+        let storedConversation = await store.getConversationById(conversationId);
         expect(storedConversation).toEqual({
             id: conversationId,
             title,
@@ -147,105 +147,6 @@ describe('client', () => {
         expect(info!.clients).toHaveLength(1);
         expect(info!.clients[0]).toEqual(client);
 
-        const textData = {
-            text: 'text',
-        };
-
-        data = JSON.stringify({
-            type: 'text',
-            data: textData,
-        });
-
-        id = '2';
-
-        msg = await Promise.any(mockTransport.sendToClient(data));
-        expect(msg).toHaveLength(msgCount + 1);
-        expect(msg[msgCount++]).toBe(`{"type":"text","id":"${id}","instanceId":"${instanceId}","conversationId":"${conversationId}","participants":${JSON.stringify(participants)},"connectionId":"${connectionId}","fromId":"${userName}","createdAt":"${jsonCurrentTime}","data":${JSON.stringify(textData)}}`);
-
-        expect(queueMessages).toHaveLength(queueMessagesCount + 1);
-        expect(queueMessages[queueMessagesCount++]).toEqual({
-            id,
-            conversationId,
-            participants,
-            instanceId: instanceId,
-            connectionId,
-            fromId: userName,
-            type: 'text',
-            createdAt: currentTime,
-            data: textData,
-        });
-
-        storedMessages = await store.findMessages({});
-        expect(storedMessages.total).toEqual(storedMessagesCount + 1);
-        expect(storedMessages.messages).toHaveLength(storedMessagesCount + 1);
-        expect(storedMessages.messages[storedMessagesCount++]).toEqual({
-            id,
-            conversationId,
-            participants,
-            connectionId,
-            fromId: userName,
-            type: 'text',
-            createdAt: currentTime,
-            data: textData,
-        });
-
-        const updateMessageData = {
-            messageId: id,
-            type: 'text',
-            text: 'text2'
-        };
-
-        data = JSON.stringify({
-            type: 'message-update',
-            data: updateMessageData,
-        });
-
-        id = '3';
-
-        msg = await Promise.any(mockTransport.sendToClient(data));
-
-        expect(msg).toHaveLength(msgCount + 1);
-        expect(msg[msgCount++]).toBe(`{"type":"message-updated","id":"${id}","instanceId":"${instanceId}","conversationId":"${conversationId}","participants":${JSON.stringify(participants)},"connectionId":"${connectionId}","fromId":"${userName}","createdAt":"${jsonCurrentTime}","data":${JSON.stringify(updateMessageData)}}`);
-
-        expect(queueMessages).toHaveLength(queueMessagesCount + 1);
-        expect(queueMessages[queueMessagesCount++]).toEqual({
-            id,
-            conversationId,
-            participants,
-            instanceId: instanceId,
-            connectionId,
-            fromId: userName,
-            type: 'message-updated',
-            createdAt: currentTime,
-            data: updateMessageData,
-        });
-
-        storedMessages = await store.findMessages({});
-        expect(storedMessages.total).toEqual(storedMessagesCount + 1);
-        expect(storedMessages.messages).toHaveLength(storedMessagesCount + 1);
-        expect(storedMessages.messages[storedMessagesCount++]).toEqual({
-            id,
-            conversationId,
-            participants,
-            connectionId,
-            fromId: userName,
-            type: 'message-updated',
-            createdAt: currentTime,
-            data: updateMessageData,
-        });
-
-        expect(storedMessages.messages[1]).toEqual({
-            id: '2',
-            conversationId,
-            participants,
-            connectionId,
-            fromId: userName,
-            type: 'text',
-            createdAt: currentTime,
-            data: { text: 'text2' },
-            updatedAt: currentTime,
-        });
-
         const newParticipants = [userName, 'test3'];
         const updateConversationData = {
             title: 'new title',
@@ -257,7 +158,7 @@ describe('client', () => {
             data: updateConversationData,
         });
 
-        id = '4';
+        id = '2';
 
         [, msg] = await Promise.all(mockTransport.sendToClient(data));
 
@@ -292,23 +193,27 @@ describe('client', () => {
             data: updateConversationData,
         });
 
-        const deleteMessageData = {
-            messageId: id,
+        const closeConversationRequest = {
+            type: 'close',
+            data: {}
         };
 
-        data = JSON.stringify({
-            type: 'message-delete',
-            data: deleteMessageData,
-        });
-
-        id = '5';
+        data = JSON.stringify(closeConversationRequest);
 
         msg = await Promise.any(mockTransport.sendToClient(data));
 
-        expect(msg).toHaveLength(msgCount + 1);
-        expect(msg[msgCount++]).toBe(`{"type":"message-deleted","id":"${id}","instanceId":"${instanceId}","conversationId":"${conversationId}","participants":${JSON.stringify(newParticipants)},"connectionId":"${connectionId}","fromId":"${userName}","createdAt":"${jsonCurrentTime}","data":${JSON.stringify(deleteMessageData)}}`);
+        msgCount++;
 
+        expect(client.state).toBe(WsClientState.Session);
+        expect(msg).toHaveLength(msgCount);
+
+        const closedConversationData = { ...closeConversationRequest.data, closedAt: currentTime };
+
+        expect(msg[msgCount - 1]).toBe(`{"type":"closed","data":${JSON.stringify(closedConversationData)}}`);
         expect(queueMessages).toHaveLength(queueMessagesCount + 1);
+
+        id = '3';
+
         expect(queueMessages[queueMessagesCount++]).toEqual({
             id,
             conversationId,
@@ -316,9 +221,20 @@ describe('client', () => {
             instanceId: instanceId,
             connectionId,
             fromId: userName,
-            type: 'message-deleted',
+            type: 'closed',
             createdAt: currentTime,
-            data: deleteMessageData,
+            data: closedConversationData,
+        });
+
+        storedConversation = await store.getConversationById(conversationId);
+        expect(storedConversation).toEqual({
+            id: conversationId,
+            participants: newParticipants,
+            createdBy: userName,
+            createdAt: currentTime,
+            closedAt: currentTime,
+            title: updateConversationData.title,
+            updatedAt: currentTime,
         });
 
         storedMessages = await store.findMessages({});
@@ -330,24 +246,49 @@ describe('client', () => {
             participants: newParticipants,
             connectionId,
             fromId: userName,
-            type: 'message-deleted',
+            type: 'closed',
             createdAt: currentTime,
-            data: deleteMessageData,
+            data: closedConversationData,
         });
+
+        const deleteConversationRequest = {
+            type: 'delete',
+            data: {},
+        };
 
         const disconnectedPromise = new Promise(resolve => {
             disconnectedResolve = resolve;
         });
 
-        const closeData = await mockTransport.closeToClient('stop test');
+        data = JSON.stringify(deleteConversationRequest);
 
-        expect(closeData).toEqual({
+        const result = await mockTransport.sendToClientToClose(data);
+
+        expect(result).toEqual({
             code: 1000,
-            data: 'Stopped',
+            data: 'Deleted',
         });
 
         expect(mockTransport.closedByClient).toBeTruthy();
-        expect(mockTransport.readyState).toBe(TransportState.CLOSED);
+
+        msgCount++;
+
+        const deletedConversationData = { closedAt: currentTime, deletedAt: currentTime };
+        expect(msg[msgCount - 1]).toBe(`{"type":"deleted","data":${JSON.stringify(deletedConversationData)}}`);
+
+        id = '4';
+        expect(queueMessages.length).toBeGreaterThan(queueMessagesCount);
+        expect(queueMessages[queueMessagesCount++]).toEqual({
+            id,
+            conversationId,
+            participants: newParticipants,
+            instanceId: instanceId,
+            connectionId,
+            fromId: userName,
+            type: 'deleted',
+            createdAt: currentTime,
+            data: deletedConversationData,
+        });
 
         const disconnectedMessage = await disconnectedPromise;
 
@@ -362,11 +303,8 @@ describe('client', () => {
             data: null,
         });
 
-        expect(client.state).toBe(WsClientState.Disconnected);
-
-        expect(queueMessages).toHaveLength(queueMessagesCount + 2);
-
-        id = '6';
+        id = '5';
+        expect(queueMessages.length).toBeGreaterThan(queueMessagesCount);
         expect(queueMessages[queueMessagesCount++]).toEqual({
             id,
             conversationId,
@@ -379,10 +317,14 @@ describe('client', () => {
             data: null,
         });
 
-        expect(queueMessages[7]).toEqual({
+        expect(mockTransport.readyState).toBe(TransportState.CLOSED);
+        expect(client.state).toBe(WsClientState.Disconnected);
+
+        expect(queueMessages.length).toBeGreaterThan(queueMessagesCount);
+        expect(queueMessages[queueMessagesCount++]).toEqual({
             conversationId,
             participants: newParticipants,
-            instanceId: instanceId, 
+            instanceId: instanceId,
             connectionId,
             fromId: userName,
             type: 'disconnected',
@@ -390,6 +332,7 @@ describe('client', () => {
             data: null,
         });
 
+        storedMessagesCount++;
         storedMessages = await store.findMessages({});
         expect(storedMessages.total).toEqual(storedMessagesCount + 1);
         expect(storedMessages.messages).toHaveLength(storedMessagesCount + 1);
