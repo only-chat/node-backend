@@ -128,3 +128,12 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+app/package-lock.json
+packages/client/package-lock.json
+packages/queues/rabbitmq/package-lock.json
+packages/queues/memory/package-lock.json
+packages/stores/elasticsearch/package-lock.json
+packages/stores/memory/package-lock.json
+packages/user-stores/elasticsearch/package-lock.json
+packages/user-stores/memory/package-lock.json
