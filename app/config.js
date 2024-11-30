@@ -3,8 +3,8 @@ export const storeConfig = {
         node: 'https://localhost:9200',
         auth: {
             username: 'elastic',
-            password: '3U7fUJ4UoouAGYrGgWO4',
-            //password:'s-4kz-hN4mmHHd_FHMsD',
+            //password: '3U7fUJ4UoouAGYrGgWO4',
+            password:'s-4kz-hN4mmHHd_FHMsD',
         },
         tls: {
             rejectUnauthorized: false,
@@ -22,8 +22,8 @@ export const userStoreConfig = {
         node: 'https://localhost:9200',
         auth: {
             username: 'elastic',
-            password: '3U7fUJ4UoouAGYrGgWO4',
-            //password:'s-4kz-hN4mmHHd_FHMsD',
+            //password: '3U7fUJ4UoouAGYrGgWO4',
+            password:'s-4kz-hN4mmHHd_FHMsD',
         },
         tls: {
             rejectUnauthorized: false,

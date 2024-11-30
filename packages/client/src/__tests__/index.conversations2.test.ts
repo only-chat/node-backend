@@ -151,6 +151,7 @@ describe('client', () => {
         const updateConversationData = {
             title: 'new title',
             participants: newParticipants,
+            updatedAt: currentTime,
         };
 
         data = JSON.stringify({

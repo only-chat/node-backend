@@ -640,6 +640,7 @@ export async function initialize(config: Config): Promise<MessageStore> {
                             messagesSize: { type: 'long', index: false },
                             closedAt: { type: 'date', index: false  },
                             deletedAt: { type: 'date', index: false  },
+                            updatedAt: { type: 'date', index: false  },
                             participants: { type: 'keyword', index: false },
                             title: { type: 'text', index: false },
                             messageId: { type: 'keyword' },

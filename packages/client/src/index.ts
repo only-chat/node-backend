@@ -773,7 +773,7 @@ export class WsClient {
 
         conversation.title = data.title;
 
-        conversation.updatedAt = new Date();
+        conversation.updatedAt = data.updatedAt;
 
         const participants = new Set([conversation.createdBy]);
 
@@ -893,12 +893,21 @@ export class WsClient {
                 await this.loadConversations(request.data as LoadRequest, request.clientMessageId);
                 return true;
             case 'update':
-                if (await this.updateConversation(request.data as ConversationUpdate)) {
-                    const type: QueueMessageType = 'updated';
+                {
+                    let data: ConversationUpdate = {
+                        conversationId: (request.data as ConversationUpdate).conversationId,
+                        title: (request.data as ConversationUpdate).title,
+                        participants: (request.data as ConversationUpdate).participants,
+                        updatedAt: new Date(),
+                    };
 
-                    this.send({ type, clientMessageId: request.clientMessageId, data: request.data });
+                    if (await this.updateConversation(data)) {
+                        const type: QueueMessageType = 'updated';
 
-                    return this.publishMessage('updated', request.clientMessageId, request.data, true)
+                        this.send({ type, clientMessageId: request.clientMessageId, data });
+
+                        return this.publishMessage(type, request.clientMessageId, data, true)
+                    }
                 }
                 break;
         }

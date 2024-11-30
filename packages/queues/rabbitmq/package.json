@@ -1,6 +1,6 @@
 {
   "name": "@only-chat/rabbitmq-queue",
-  "version": "0.2.0-beta.6",
+  "version": "0.2.0-beta.7",
   "description": "RabbitMQ queue for only-chat",
   "homepage": "https://github.com/only-chat/node-backend/packages/queues/rabbitmq",
   "main": "dist/index.js",
@@ -17,7 +17,7 @@
   "author": "only-chat",
   "license": "MIT",
   "devDependencies": {
-    "@only-chat/types": "0.2.0-beta.6",
+    "@only-chat/types": "0.2.0-beta.7",
     "@types/amqplib": "^0.10.5",
     "typescript": "^5.4.5"
   },
