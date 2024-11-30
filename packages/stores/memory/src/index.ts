@@ -293,13 +293,14 @@ async function saveConversation(c: Conversation): Promise<SaveResponse> {
 }
 
 async function saveMessage(m: Message): Promise<SaveResponse> {
-    const exists = m.id && messages.has(m.id) && conversations.has(m.conversationId || '');
+    const conversationId = m.conversationId ?? '';
+    const exists = m.id && messages.has(m.id) && conversations.has(conversationId);
 
     const _id = m.id ?? (++messageId).toString();
 
     messages.set(_id, {...m, id: _id});
 
-    conversations.get(m.conversationId || '')?.messages.push(m.id);
+    conversations.get(conversationId)?.messages.push(_id);
 
     return {
         _id,
