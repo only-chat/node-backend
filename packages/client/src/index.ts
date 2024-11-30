@@ -81,18 +81,18 @@ let userStore: UserStore = undefined!;
 
 export class WsClient {
     // These members are public for testing purposes only
-    public static connectedClients: Set<string> = new Set();
-    public static watchers: Map<string, WsClient> = new Map();
-    public static conversations: Map<string, ConversationInfo> = new Map();
+    public static readonly connectedClients: Set<string> = new Set();
+    public static readonly watchers: Map<string, WsClient> = new Map();
+    public static readonly conversations: Map<string, ConversationInfo> = new Map();
 
-    private static conversationsCache: Map<string, Set<string>> = new Map();
+    private static readonly conversationsCache: Map<string, Set<string>> = new Map();
 
     public connectionId?: string;
     public conversation?: Conversation;
     public state = WsClientState.None;
     public id?: string;
 
-    private transport: Transport;
+    private readonly transport: Transport;
     private lastError?: string;
 
     constructor(t: Transport) {
@@ -105,11 +105,11 @@ export class WsClient {
     }
 
     static async addClient(conversation: Conversation, wc: WsClient) {
-        let info = WsClient.conversations.get(conversation.id!);
+        let info = WsClient.conversations.get(conversation.id);
         if (!info) {
             info = { participants: new Set<string>(conversation.participants), clients: [wc] };
-            WsClient.conversations.set(conversation.id!, info);
-            WsClient.conversationsCache.delete(conversation.id!)
+            WsClient.conversations.set(conversation.id, info);
+            WsClient.conversationsCache.delete(conversation.id)
         } else {
             info.clients.push(wc);
         }
@@ -320,7 +320,7 @@ export class WsClient {
                 });
 
                 if (qm.type === 'deleted') {
-                    WsClient.conversationsCache.delete(conversationId!);
+                    WsClient.conversationsCache.delete(conversationId);
                 }
             }
 
@@ -416,7 +416,7 @@ export class WsClient {
     }
 
     private async stop(statusDescription: string, err?: any) {
-        if(logger && err?.message) {
+        if (logger && err?.message) {
             logger.error(err.message);
         }
 
@@ -541,7 +541,7 @@ export class WsClient {
 
         this.conversation = conversation;
 
-        await WsClient.addClient(conversation!, this);
+        await WsClient.addClient(conversation, this);
 
         const size = data.messagesSize != null && data.messagesSize >= 0 ? data.messagesSize : defaultSize;
 
@@ -557,7 +557,7 @@ export class WsClient {
             }
 
             oldMessages = await store.findMessages(fr);
-            lastMessage = await store.getParticipantLastMessage(this.id!, conversation!.id!);
+            lastMessage = await store.getParticipantLastMessage(this.id!, conversation.id);
         }
 
         const connected = conversation!.participants.filter(p => WsClient.connectedClients.has(p));
@@ -734,12 +734,16 @@ export class WsClient {
 
         switch (message.type) {
             case 'file':
-                const { link, name, type, size } = request as FileMessage;
-                message.data = { link, name, type, size };
+                {
+                    const { link, name, type, size } = request as FileMessage;
+                    message.data = { link, name, type, size };
+                }
                 break;
             case 'text':
-                const { text } = request as TextMessage;
-                message.data = { text };
+                {
+                    const { text } = request as TextMessage;
+                    message.data = { text };
+                }
                 break;
         }
 

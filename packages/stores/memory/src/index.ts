@@ -175,7 +175,7 @@ async function getParticipantConversations(participant: string, excludeIds: stri
 
     const sortedConversations = Array.from(conversations.values()).map(kv=>kv.conversation).sort((a,b)=> {
         if(a.createdAt == b.createdAt){
-            if(a.id! === b.id) {
+            if(a.id === b.id) {
                 return 0;
             }
 
@@ -299,7 +299,7 @@ async function saveMessage(m: Message): Promise<SaveResponse> {
 
     messages.set(_id, {...m, id: _id});
 
-    conversations.get(m.conversationId || '')?.messages.push(m.id!);
+    conversations.get(m.conversationId || '')?.messages.push(m.id);
 
     return {
         _id,
