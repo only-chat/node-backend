@@ -105,11 +105,11 @@ export class WsClient {
     }
 
     static async addClient(conversation: Conversation, wc: WsClient) {
-        let info = WsClient.conversations.get(conversation.id);
+        let info = WsClient.conversations.get(conversation.id!);
         if (!info) {
             info = { participants: new Set<string>(conversation.participants), clients: [wc] };
-            WsClient.conversations.set(conversation.id, info);
-            WsClient.conversationsCache.delete(conversation.id)
+            WsClient.conversations.set(conversation.id!, info);
+            WsClient.conversationsCache.delete(conversation.id!)
         } else {
             info.clients.push(wc);
         }
@@ -517,10 +517,10 @@ export class WsClient {
                 conversation = {
                     id: conversationId,
                     participants: participantsArray,
-                    title: conversation?.title || data.title,
-                    createdBy: conversation?.createdBy || this.id!,
+                    title: conversation?.title ?? data.title,
+                    createdBy: conversation?.createdBy ?? this.id!,
                     updatedAt: conversation?.createdAt ? now : undefined,
-                    createdAt: conversation?.createdAt || now,
+                    createdAt: conversation?.createdAt ?? now,
                 };
 
                 const response = await store.saveConversation(conversation);
@@ -541,7 +541,7 @@ export class WsClient {
 
         this.conversation = conversation;
 
-        await WsClient.addClient(conversation, this);
+        await WsClient.addClient(conversation!, this);
 
         const size = data.messagesSize != null && data.messagesSize >= 0 ? data.messagesSize : defaultSize;
 
@@ -557,7 +557,7 @@ export class WsClient {
             }
 
             oldMessages = await store.findMessages(fr);
-            lastMessage = await store.getParticipantLastMessage(this.id!, conversation.id);
+            lastMessage = await store.getParticipantLastMessage(this.id!, conversation!.id!);
         }
 
         const connected = conversation!.participants.filter(p => WsClient.connectedClients.has(p));
@@ -880,8 +880,8 @@ export class WsClient {
                         data.deletedAt = now;
                     }
 
-                    let type: QueueMessageType | null = null;
-                    if (type = await this.closeDeleteConversation(data, del)) {
+                    let type: QueueMessageType | null = await this.closeDeleteConversation(data, del);
+                    if (type) {
 
                         this.send({ type, clientMessageId: request.clientMessageId, data });
 
@@ -1031,7 +1031,7 @@ export class WsClient {
     }
 
     private async findMessages(request: FindRequest, clientMessageId?: string): Promise<void> {
-        const result = await store.getParticipantConversations(this.id!, [], request.from || 0, request.size || defaultSize);
+        const result = await store.getParticipantConversations(this.id!, [], request.from ?? 0, request.size ?? defaultSize);
 
         if (request.conversationIds?.length) {
             request.conversationIds = Array.from(new Set(result.conversations.map(c => c.id!).concat(request.conversationIds)));
