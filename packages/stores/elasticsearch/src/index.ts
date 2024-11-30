@@ -637,6 +637,7 @@ export async function initialize(config: Config): Promise<MessageStore> {
                         dynamic: 'strict',
                         properties: {
                             conversationId: { type: 'keyword' },
+                            messagesSize: { type: 'long', index: false },
                             closedAt: { type: 'date', index: false  },
                             deletedAt: { type: 'date', index: false  },
                             participants: { type: 'keyword', index: false },
