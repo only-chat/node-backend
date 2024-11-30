@@ -22,6 +22,7 @@ export interface ConversationUpdate {
     participants?: string[]
     closedAt?: Date
     deletedAt?: Date
+    updatedAt?: Date
 }
 
 export interface FileMessage {
