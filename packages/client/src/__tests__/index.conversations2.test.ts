@@ -77,7 +77,7 @@ describe('client', () => {
         expect(WsClient.connectedClients.size).toBe(1);
         expect(WsClient.connectedClients.has(userName)).toBeTruthy();
 
-        const participants = [userName, 'test2'];
+        let participants = [userName, ' test2 '];
         const title = 'conversationTitle';
 
         data = JSON.stringify({
@@ -90,6 +90,8 @@ describe('client', () => {
         });
 
         [, msg] = await Promise.all(mockTransport.sendToClient(data));
+
+        participants = participants.map(p => p.trim());
 
         msgCount++;
 
@@ -147,7 +149,7 @@ describe('client', () => {
         expect(info!.clients).toHaveLength(1);
         expect(info!.clients[0]).toEqual(client);
 
-        const newParticipants = [userName, 'test3'];
+        let newParticipants = [userName, ' test3 '];
         const updateConversationData = {
             title: 'new title',
             participants: newParticipants,
@@ -162,6 +164,8 @@ describe('client', () => {
         id = '2';
 
         [, msg] = await Promise.all(mockTransport.sendToClient(data));
+
+        newParticipants = newParticipants.map(p => p.trim());
 
         expect(msg).toHaveLength(msgCount + 2);
         expect(msg[msgCount++]).toBe(`{"type":"updated","data":${JSON.stringify(updateConversationData)}}`);

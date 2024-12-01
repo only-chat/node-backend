@@ -24,6 +24,7 @@ export interface MessageDelete {
 
 export interface MessageUpdate extends Partial<FileMessage>, Partial<TextMessage> {
     messageId: string
+    updatedAt: Date
 }
 
 export type MessageType = 'connected' | 'disconnected' | 'joined' | 'left' | 'closed' | 'deleted' | 'loaded' | 'updated' | 'message-updated' | 'message-deleted' | 'text' | 'file'

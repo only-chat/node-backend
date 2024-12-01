@@ -543,7 +543,7 @@ export class WsClient {
 
         await WsClient.addClient(conversation!, this);
 
-        const size = data.messagesSize != null && data.messagesSize >= 0 ? data.messagesSize : defaultSize;
+        const size = data.messagesSize ?? defaultSize;
 
         let lastMessage: StoreMessage | undefined = undefined;
         let oldMessages: FindResult | undefined = undefined;
@@ -747,7 +747,7 @@ export class WsClient {
                 break;
         }
 
-        message.updatedAt = new Date();
+        message.updatedAt = request.updatedAt;
 
         const response = await store.saveMessage(message);
 
@@ -777,7 +777,7 @@ export class WsClient {
 
         const participants = new Set([conversation.createdBy]);
 
-        data.participants?.forEach(p => participants.add(p));
+        data.participants?.forEach(p => participants.add(p.trim()));
 
         conversation.participants = Array.from(participants);
 
@@ -865,13 +865,16 @@ export class WsClient {
             return false;
         }
 
+        const clientMessageId = request.clientMessageId;
+
         switch (request.type) {
             case 'close':
             case 'delete':
                 {
+                    const {conversationId} = request.data as ConversationUpdate;
                     const now = new Date();
                     let data: ConversationUpdate = {
-                        conversationId: (request.data as ConversationUpdate).conversationId,
+                        conversationId,
                         closedAt: now,
                     };
 
@@ -883,30 +886,31 @@ export class WsClient {
                     let type: QueueMessageType | null = await this.closeDeleteConversation(data, del);
                     if (type) {
 
-                        this.send({ type, clientMessageId: request.clientMessageId, data });
+                        this.send({ type, clientMessageId, data });
 
-                        return this.publishMessage(type, request.clientMessageId, data, true)
+                        return this.publishMessage(type, clientMessageId, data, true);
                     }
                 }
                 break;
             case 'load':
-                await this.loadConversations(request.data as LoadRequest, request.clientMessageId);
+                await this.loadConversations(request.data as LoadRequest, clientMessageId);
                 return true;
             case 'update':
                 {
+                    const {conversationId, title, participants} = request.data as ConversationUpdate;
                     let data: ConversationUpdate = {
-                        conversationId: (request.data as ConversationUpdate).conversationId,
-                        title: (request.data as ConversationUpdate).title,
-                        participants: (request.data as ConversationUpdate).participants,
+                        conversationId,
+                        title,
+                        participants,
                         updatedAt: new Date(),
                     };
 
                     if (await this.updateConversation(data)) {
                         const type: QueueMessageType = 'updated';
 
-                        this.send({ type, clientMessageId: request.clientMessageId, data });
+                        this.send({ type, clientMessageId, data });
 
-                        return this.publishMessage(type, request.clientMessageId, data, true)
+                        return this.publishMessage(type, clientMessageId, data, true);
                     }
                 }
                 break;
@@ -948,6 +952,7 @@ export class WsClient {
                 }
                 break;
             case 'message-update':
+                (request.data as MessageUpdate).updatedAt = new Date();
                 if (!await this.updateMessage(request.data as MessageUpdate)) {
                     return false;
                 }
