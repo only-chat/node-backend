@@ -42,6 +42,7 @@ export interface MessageDelete {
 
 export interface MessageUpdate extends Partial<FileMessage>, Partial<TextMessage> {
     messageId: string
+    updatedAt: Date
 }
 
 export interface FindRequest {
