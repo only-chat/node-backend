@@ -20,6 +20,7 @@ export interface TextMessage {
 
 export interface MessageDelete {
     messageId: string
+    deletedAt: Date
 }
 
 export interface MessageUpdate extends Partial<FileMessage>, Partial<TextMessage> {

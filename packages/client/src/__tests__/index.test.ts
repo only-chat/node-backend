@@ -118,7 +118,7 @@ describe('client', () => {
             data: null,
         });
 
-        const storedConversation = await store.getConversationById(conversationId);
+        const storedConversation = await store.getParticipantConversationById(userName, conversationId);
         expect(storedConversation).toEqual({
             id: conversationId,
             title,
@@ -142,6 +142,7 @@ describe('client', () => {
             data: null,
         });
 
+        expect(WsClient.joinedParticipants.get(conversationId)?.size).toBe(1);
         expect(WsClient.conversations.size).toBe(1);
         const info = WsClient.conversations.get(conversationId);
         expect(info).not.toBeNull();
@@ -266,7 +267,8 @@ describe('client', () => {
         [, msg] = await Promise.all(mockTransport.sendToClient(data));
 
         newParticipants = newParticipants.map(p => p.trim());
-
+        updateConversationData.participants = newParticipants;
+        
         expect(msg).toHaveLength(msgCount + 2);
         expect(msg[msgCount++]).toBe(`{"type":"updated","data":${JSON.stringify(updateConversationData)}}`);
         expect(msg[msgCount++]).toBe(`{"type":"updated","id":"${id}","instanceId":"${instanceId}","conversationId":"${conversationId}","participants":${JSON.stringify(newParticipants)},"connectionId":"${connectionId}","fromId":"${userName}","createdAt":"${jsonCurrentTime}","data":${JSON.stringify(updateConversationData)}}`);
@@ -300,6 +302,7 @@ describe('client', () => {
 
         const deleteMessageData = {
             messageId: id,
+            deletedAt: currentTime,
         };
 
         data = JSON.stringify({
@@ -327,6 +330,7 @@ describe('client', () => {
             data: deleteMessageData,
         });
 
+        storedMessagesCount--;
         storedMessages = await store.findMessages({});
         expect(storedMessages.total).toEqual(storedMessagesCount + 1);
         expect(storedMessages.messages).toHaveLength(storedMessagesCount + 1);
@@ -388,7 +392,7 @@ describe('client', () => {
         expect(queueMessages[7]).toEqual({
             conversationId,
             participants: newParticipants,
-            instanceId: instanceId, 
+            instanceId: instanceId,
             connectionId,
             fromId: userName,
             type: 'disconnected',
@@ -410,6 +414,7 @@ describe('client', () => {
             data: null,
         });
 
+        expect(WsClient.joinedParticipants.size).toBe(0);
         expect(WsClient.connectedClients.size).toBe(0);
         expect(WsClient.watchers.size).toBe(0);
         expect(WsClient.conversations.size).toBe(0);

@@ -33,20 +33,22 @@ describe('client', () => {
 
         const store = await initializeStore();
 
+        const userName = 'test';
+
         const conversation1 = {
             id: '1',
-            participants: ['test', '1', '2'],
-            createdBy: 'test',
-            createdAt: new Date('2024-01-01')
+            participants: [userName, '1', '2'],
+            createdBy: userName,
+            createdAt: new Date('2024-01-01'),
         };
-        
+
         const conversation2 = {
             id: '2',
-            participants: ['test', '1', '2'],
+            participants: [userName, '1', '2'],
             createdBy: '2',
-            createdAt: new Date('2024-01-01')
+            createdAt: new Date('2024-01-01'),
         };
-        
+
         let result1 = await store.saveConversation(conversation1);
         expect(result1._id).toBe('1');
         expect(result1.result).toBe('created');
@@ -68,11 +70,11 @@ describe('client', () => {
         const client = new WsClient(mockTransport);
 
         expect(client.state).toBe(WsClientState.None);
+        expect(WsClient.joinedParticipants.size).toBe(0);
         expect(WsClient.connectedClients.size).toBe(0);
         expect(WsClient.watchers.size).toBe(0);
         expect(WsClient.conversations.size).toBe(0);
 
-        const userName = 'test';
         let data = JSON.stringify({ authInfo: { name: userName, password: 'test' }, conversationsSize: 100 });
 
         let msg = await Promise.any(mockTransport.sendToClient(data));
@@ -82,7 +84,7 @@ describe('client', () => {
         expect(client.state).toBe(WsClientState.Connected);
         expect(msg).toHaveLength(msgCount + 1);
         expect(msg[msgCount - 1]).toBe(`{"type":"hello","instanceId":"${instanceId}"}`);
-        expect(msg[msgCount++]).toBe(`{"type":"connection","connectionId":"1","id":"${userName}","conversations":{"conversations":${JSON.stringify([conversation2, conversation1])},"from":0,"size":100,"total":2}}`);
+        expect(msg[msgCount++]).toBe(`{"type":"connection","connectionId":"1","id":"${userName}","conversations":{"conversations":${JSON.stringify([{...conversation2, connected:[]}, {...conversation1, connected:[]}])},"from":0,"size":100,"total":2}}`);
         expect(queueMessages).toHaveLength(queueMessagesCount + 1);
         expect(queueMessages[queueMessagesCount++]).toEqual({
             instanceId: instanceId,
@@ -116,9 +118,9 @@ describe('client', () => {
         const conversationId = '1';
         const connectionId = '1';
 
-        const closedConversationData = {... closeConversationRequest.data, closedAt: currentTime };
+        const closedConversationData = { ...closeConversationRequest.data, closedAt: currentTime };
 
-        expect(msg[msgCount-1]).toBe(`{"type":"closed","data":${JSON.stringify(closedConversationData)}}`);
+        expect(msg[msgCount - 1]).toBe(`{"type":"closed","data":${JSON.stringify(closedConversationData)}}`);
         expect(queueMessages).toHaveLength(queueMessagesCount + 1);
         expect(queueMessages[queueMessagesCount++]).toEqual({
             id,
@@ -130,7 +132,7 @@ describe('client', () => {
             data: closedConversationData,
         });
 
-        let storedConversation = await store.getConversationById(conversationId);
+        let storedConversation = await store.getParticipantConversationById(userName, conversationId);
         expect(storedConversation).toEqual({
             id: conversationId,
             participants: conversation1.participants,
@@ -167,12 +169,14 @@ describe('client', () => {
 
         expect(msg).toHaveLength(msgCount);
 
-        let deletedConversationData = {... deleteConversationRequest.data,
+        let deletedConversationData = {
+            ...deleteConversationRequest.data,
             closedAt: currentTime,
             deletedAt: currentTime,
-            participants: undefined as string[]|undefined};
+            participants: undefined as string[] | undefined
+        };
 
-        expect(msg[msgCount-1]).toBe(`{"type":"deleted","data":${JSON.stringify(deletedConversationData)}}`);
+        expect(msg[msgCount - 1]).toBe(`{"type":"deleted","data":${JSON.stringify(deletedConversationData)}}`);
         expect(queueMessages).toHaveLength(queueMessagesCount + 1);
 
         id = '2'
@@ -187,14 +191,14 @@ describe('client', () => {
             data: deletedConversationData,
         });
 
-        storedConversation = await store.getConversationById(conversationId);
+        storedConversation = await store.getParticipantConversationById(userName, conversationId);
         expect(storedConversation).toBeUndefined();
 
         storedMessagesCount++;
         storedMessages = await store.findMessages({});
         expect(storedMessages.total).toEqual(storedMessagesCount);
         expect(storedMessages.messages).toHaveLength(storedMessagesCount);
-        expect(storedMessages.messages[storedMessagesCount-1]).toEqual({
+        expect(storedMessages.messages[storedMessagesCount - 1]).toEqual({
             id,
             connectionId,
             fromId: userName,
@@ -213,9 +217,9 @@ describe('client', () => {
 
         expect(msg).toHaveLength(msgCount);
 
-        deletedConversationData = {... deleteConversationRequest.data, closedAt: currentTime, deletedAt: currentTime, participants: ['1', '2'] };
+        deletedConversationData = { ...deleteConversationRequest.data, closedAt: currentTime, deletedAt: currentTime, participants: ['1', '2'] };
 
-        expect(msg[msgCount-1]).toBe(`{"type":"updated","data":${JSON.stringify(deletedConversationData)}}`);
+        expect(msg[msgCount - 1]).toBe(`{"type":"updated","data":${JSON.stringify(deletedConversationData)}}`);
         expect(queueMessages).toHaveLength(queueMessagesCount + 1);
 
         id = '3'
@@ -230,14 +234,14 @@ describe('client', () => {
             data: deletedConversationData,
         });
 
-        storedConversation = await store.getConversationById(conversationId);
+        storedConversation = await store.getParticipantConversationById(undefined, conversationId);
         expect(storedConversation).toBeUndefined();
 
         storedMessagesCount++;
         storedMessages = await store.findMessages({});
         expect(storedMessages.total).toEqual(storedMessagesCount);
         expect(storedMessages.messages).toHaveLength(storedMessagesCount);
-        expect(storedMessages.messages[storedMessagesCount-1]).toEqual({
+        expect(storedMessages.messages[storedMessagesCount - 1]).toEqual({
             id,
             connectionId,
             fromId: userName,
@@ -252,7 +256,7 @@ describe('client', () => {
 
         const result = await mockTransport.sendToClientToClose(data);
 
-        expect(result.data).toEqual('Failed processRequest. User is not allowed to close conversation');
+        expect(result.data).toEqual('Failed processRequest. Conversation not found');
         expect(mockTransport.closedByClient).toBeTruthy();
         expect(client.state).toBe(WsClientState.Disconnected);
         expect(queueMessages).toHaveLength(queueMessagesCount + 1);
@@ -264,6 +268,7 @@ describe('client', () => {
             createdAt: currentTime,
             data: null,
         });
+        expect(WsClient.joinedParticipants.size).toBe(0);
         expect(WsClient.connectedClients.size).toBe(0);
         expect(WsClient.watchers.size).toBe(0);
         expect(WsClient.conversations.size).toBe(0);
@@ -289,7 +294,7 @@ describe('client', () => {
         queue.subscribe(queueCallback);
 
         const store = await initializeStore();
-        
+
         const conversation3 = {
             id: '3',
             participants: ['1', '2', '3'],
@@ -314,6 +319,7 @@ describe('client', () => {
         const client = new WsClient(mockTransport);
 
         expect(client.state).toBe(WsClientState.None);
+        expect(WsClient.joinedParticipants.size).toBe(0);
         expect(WsClient.connectedClients.size).toBe(0);
         expect(WsClient.watchers.size).toBe(0);
         expect(WsClient.conversations.size).toBe(0);
@@ -355,7 +361,7 @@ describe('client', () => {
 
         const result = await mockTransport.sendToClientToClose(data);
 
-        expect(result.data).toEqual('Failed processRequest. User is not allowed to delete conversation');
+        expect(result.data).toEqual('Failed processRequest. Conversation not found');
         expect(mockTransport.closedByClient).toBeTruthy();
         expect(client.state).toBe(WsClientState.Disconnected);
         expect(queueMessages).toHaveLength(queueMessagesCount + 1);
@@ -367,6 +373,7 @@ describe('client', () => {
             createdAt: currentTime,
             data: null,
         });
+        expect(WsClient.joinedParticipants.size).toBe(0);
         expect(WsClient.connectedClients.size).toBe(0);
         expect(WsClient.watchers.size).toBe(0);
         expect(WsClient.conversations.size).toBe(0);

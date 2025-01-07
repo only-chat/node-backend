@@ -78,7 +78,7 @@ async function findMessages(r: FindRequest): Promise<FindResult> {
             })
         })
     } else {
-        m = [...messages.values()];
+        m = Array.from(messages.values()).filter(m => filterMessage(m, r));
     }
 
     if (r.sort) {
@@ -112,8 +112,6 @@ async function findMessages(r: FindRequest): Promise<FindResult> {
         total: m.length,
     };
 }
-
-const getConversationById = getParticipantConversationById.bind(this, undefined);
 
 async function getLastMessagesTimestamps(participant: string, conversationId: string[]): Promise<ConversationLastMessages> {
     const result: ConversationLastMessages = {};
@@ -170,12 +168,13 @@ async function getParticipantConversationById(participant: string | undefined, i
     return c.conversation;
 }
 
-async function getParticipantConversations(participant: string, excludeIds: string[], from: number = 0, size: number = 100): Promise<ConversationsResult> {
+async function getParticipantConversations(participant: string, ids: string[] | undefined, excludeIds: string[] = [], from: number = 0, size: number = 100): Promise<ConversationsResult> {
     const result: Conversation[] = [];
 
-    const sortedConversations = Array.from(conversations.values()).map(kv=>kv.conversation).sort((a,b)=> {
-        if(a.createdAt == b.createdAt){
-            if(a.id === b.id) {
+    const filteredConversations = Array.from(conversations.values()).filter(c => ids ? ids.includes(c.conversation.id!) : true && !excludeIds.includes(c.conversation.id!));
+    const sortedConversations = filteredConversations.map(kv => kv.conversation).sort((a, b) => {
+        if (a.createdAt == b.createdAt) {
+            if (a.id === b.id) {
                 return 0;
             }
 
@@ -189,7 +188,7 @@ async function getParticipantConversations(participant: string, excludeIds: stri
             return 1;
 
 
-        return a.createdAt<b.createdAt ? 1 : -1;
+        return a.createdAt < b.createdAt ? 1 : -1;
     });
 
     let start = from;
@@ -298,7 +297,7 @@ async function saveMessage(m: Message): Promise<SaveResponse> {
 
     const _id = m.id ?? (++messageId).toString();
 
-    messages.set(_id, {...m, id: _id});
+    messages.set(_id, { ...m, id: _id });
 
     conversations.get(conversationId)?.messages.push(_id);
 
@@ -327,7 +326,6 @@ export async function initialize(): Promise<MessageStore> {
 
     return {
         findMessages,
-        getConversationById,
         getLastMessagesTimestamps,
         getParticipantConversationById,
         getParticipantConversations,

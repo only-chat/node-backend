@@ -80,10 +80,15 @@ describe('findMessages', () => {
     const time = new Date('2024-01-01');
     const mockMessages = [
         { id: '1', conversationId: conversation1.id, type: 'text', clientMessageId: 'client1', fromId: 'user1', data: { text: 'Hello' }, createdAt: time, updatedAt: time },
-        { id: '2', conversationId: conversation1.id, type: 'text', clientMessageId: 'client2', fromId: 'user1', data: { text: 'Mock message 2' }, createdAt: time, updatedAt: time },
+        { id: '2', conversationId: conversation1.id, type: 'text', clientMessageId: 'client2', fromId: 'user1', data: { text: 'Mock message 2' }, createdAt: new Date('2021-01-01'), updatedAt: time },
         { id: '3', conversationId: conversation2.id, type: 'text', clientMessageId: 'client3', fromId: 'user2', data: { text: 'Mock message 3' }, createdAt: time, updatedAt: time },
         { id: '4', conversationId: conversation2.id, type: 'text', clientMessageId: 'client4', fromId: 'user2', data: { text: 'Mock message 4' }, createdAt: time, updatedAt: time },
         { id: '5', conversationId: conversation3.id, type: 'text', clientMessageId: 'client1', fromId: 'user1', data: { text: 'Hello' }, createdAt: time, updatedAt: time },
+        { id: '6', conversationId: conversation3.id, type: 'text', clientMessageId: 'client1', fromId: 'user1', data: { text: 'Hello' }, createdAt: time, deletedAt: time },
+        { id: '7', conversationId: conversation1.id, type: 'text', clientMessageId: 'client1', fromId: 'user3', data: { text: 'Hello' }, createdAt: time, updatedAt: time },
+        { id: '8', conversationId: conversation1.id, type: 'wrong_type', clientMessageId: 'client1', fromId: 'user1', data: { text: 'Hello' }, createdAt: time, updatedAt: time },
+        { id: '9', conversationId: conversation2.id, type: 'text', clientMessageId: 'client1', fromId: 'user2', data: { text: 'Mock message 3' }, createdAt: new Date('2026-01-31') },
+        { id: '10', conversationId: conversation3.id, type: 'text', clientMessageId: 'client1', fromId: 'user1', data: { text: 'Hello' }, createdAt: new Date('2025-01-01'), updatedAt: time },
     ];
 
     beforeEach(async () => {
@@ -119,7 +124,7 @@ describe('findMessages', () => {
     });
 
     it('should return participant conversations', async () => {
-        const result1 = await store.getParticipantConversations('2', undefined, 1, 3);
+        const result1 = await store.getParticipantConversations('2', undefined, undefined, 1, 3);
 
         expect(result1).toEqual({
             from: 1,
@@ -137,7 +142,7 @@ describe('findMessages', () => {
             conversations: [conversation3],
         });
 
-        const result3 = await store.getParticipantConversations('3', undefined, 1);
+        const result3 = await store.getParticipantConversations('3', undefined, undefined, 1);
 
         expect(result3).toEqual({
             from: 1,
@@ -158,7 +163,8 @@ describe('findMessages', () => {
 
     it('should return filtered messages based on the provided request', async () => {
         const request = {
-            ids: ['1', '2', '3'],
+            ids: ['1', '2', '3', '5', '6', '7', '8', '9'],
+            conversationIds: [] as string[],
             excludeIds: ['4', '5'],
             text: 'Hello',
             fromIds: ['user1', 'user2'],
@@ -172,11 +178,29 @@ describe('findMessages', () => {
             from: 0,
         };
 
-        const result = await store.findMessages(request);
+        const result1 = await store.findMessages(request);
 
-        expect(result.messages).toHaveLength(1);
-        expect(result.total).toBe(1);
-        expect(result.messages[0].id).toBe(mockMessages[0].id);
+        expect(result1.messages).toHaveLength(1);
+        expect(result1.total).toBe(1);
+        expect(result1.messages[0].id).toBe(mockMessages[0].id);
+
+        request.ids = [];
+        request.conversationIds = [conversation1.id, conversation2.id];
+        request.text = '';
+
+        const result2 = await store.findMessages(request);
+
+        expect(result2.messages).toHaveLength(1);
+        expect(result2.total).toBe(1);
+        expect(result2.messages[0].id).toBe(mockMessages[0].id);
+
+        request.conversationIds = [];
+        const result3 = await store.findMessages(request);
+
+        expect(result3.messages).toHaveLength(2);
+        expect(result3.total).toBe(2);
+        expect(result3.messages[0].id).toBe(mockMessages[9].id);
+        expect(result3.messages[1].id).toBe(mockMessages[0].id);
     });
 
     it('should return an empty array if no messages match the provided request', async () => {

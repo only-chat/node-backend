@@ -25,6 +25,7 @@ export interface Config {
 export interface LoadRequest {
     from?: number
     size?: number
+    ids?: string[]
     excludeIds?: string[]
     before?: Date
 }
@@ -84,6 +85,7 @@ export class WsClient {
     public static readonly connectedClients: Set<string> = new Set();
     public static readonly watchers: Map<string, WsClient> = new Map();
     public static readonly conversations: Map<string, ConversationInfo> = new Map();
+    public static readonly joinedParticipants: Map<string, Set<string>> = new Map();
 
     private static readonly conversationsCache: Map<string, Set<string>> = new Map();
 
@@ -217,7 +219,7 @@ export class WsClient {
         let participants = WsClient.conversationsCache.get(conversationId);
 
         if (!participants) {
-            const conversation = await store.getConversationById(conversationId);
+            const conversation = await store.getParticipantConversationById(undefined, conversationId);
             if (!conversation) {
                 return;
             }
@@ -256,7 +258,7 @@ export class WsClient {
     }
 
     private static async syncConversation(conversationId: string): Promise<boolean> {
-        const conversation = await store.getConversationById(conversationId);
+        const conversation = await store.getParticipantConversationById(undefined, conversationId);
         if (!conversation) {
             return false;
         }
@@ -294,10 +296,10 @@ export class WsClient {
             WsClient.publishToWatchList(qm.fromId, wc => {
                 if (qm.connectionId !== wc.connectionId || qm.instanceId !== instanceId) {
                     wc.send({
+                        type: qm.type,
                         id: qm.id,
                         connectionId: qm.connectionId,
                         fromId: qm.fromId,
-                        type: qm.type,
                         createdAt: qm.createdAt,
                     });
                 }
@@ -339,6 +341,30 @@ export class WsClient {
             case 'message-updated':
             case 'message-deleted':
                 if (qm.conversationId) {
+                    switch (qm.type) {
+                        case 'joined':
+                            {
+                                const participants = WsClient.joinedParticipants.get(qm.conversationId);
+                                if (participants) {
+                                    participants.add(qm.fromId);
+                                } else {
+                                    WsClient.joinedParticipants.set(qm.conversationId, new Set([qm.fromId]));
+                                }
+                            }
+                            break;
+                        case 'left':
+                            {
+                                const participants = WsClient.joinedParticipants.get(qm.conversationId);
+                                if (participants) {
+                                    participants.delete(qm.fromId);
+                                    if (!participants.size) {
+                                        WsClient.joinedParticipants.delete(qm.conversationId);
+                                    }
+                                }
+                            }
+                            break;
+                    }
+
                     const ids: string[] = [];
                     await WsClient.publishToWsList(qm.conversationId, async (wc, _) => {
                         wc.send(qm);
@@ -376,8 +402,8 @@ export class WsClient {
                 conversationId: this.conversation?.id,
                 participants: this.conversation?.participants,
                 connectionId: this.connectionId!,
-                clientMessageId: clientMessageId,
                 fromId: this.id!,
+                clientMessageId: clientMessageId,
                 createdAt,
                 data: data as MessageData,
             };
@@ -500,7 +526,7 @@ export class WsClient {
                     return false;
                 }
 
-                conversation = await store.getConversationById(conversationId);
+                conversation = await store.getParticipantConversationById(this.id, conversationId);
             } else if (!data.title) {
                 this.lastError = "Conversation title required";
                 return false;
@@ -546,7 +572,7 @@ export class WsClient {
         const size = data.messagesSize ?? defaultSize;
 
         let lastMessage: StoreMessage | undefined = undefined;
-        let oldMessages: FindResult | undefined = undefined;
+        let messages: FindResult | undefined = undefined;
         if (!created) {
             const fr: FindRequest = {
                 size,
@@ -556,21 +582,19 @@ export class WsClient {
                 sortDesc: true,
             }
 
-            oldMessages = await store.findMessages(fr);
+            messages = await store.findMessages(fr);
             lastMessage = await store.getParticipantLastMessage(this.id!, conversation!.id!);
         }
 
-        const connected = conversation!.participants.filter(p => WsClient.connectedClients.has(p));
+        const connected = conversation!.participants.filter(p => p === this.id || WsClient.joinedParticipants.get(conversation!.id!)?.has(p));
 
         const joined = {
             type: 'conversation',
             clientMessageId: request.clientMessageId,
             conversation,
             connected,
-            messages: oldMessages?.messages.reverse(),
-            total: oldMessages?.total,
+            messages,
             leftAt: lastMessage?.createdAt,
-            closedAt: conversation!.closedAt,
         };
 
         this.send(joined);
@@ -699,7 +723,7 @@ export class WsClient {
             return false;
         }
 
-        message.deletedAt = new Date();
+        message.deletedAt = request.deletedAt;
 
         const response = await store.saveMessage(message);
 
@@ -736,6 +760,10 @@ export class WsClient {
             case 'file':
                 {
                     const { link, name, type, size } = request as FileMessage;
+                    if (!name) {
+                        this.lastError = 'Wrong file name';
+                        return false;
+                    }
                     message.data = { link, name, type, size };
                 }
                 break;
@@ -763,7 +791,7 @@ export class WsClient {
     }
 
     private async updateConversation(data: ConversationUpdate): Promise<boolean> {
-        const conversation = data.conversationId ? await store.getConversationById(data.conversationId) : this.conversation;
+        const conversation = data.conversationId ? await store.getParticipantConversationById(this.id, data.conversationId) : this.conversation;
 
         if (!conversation || this.id !== conversation.createdBy) {
             //Only creator can update conversation
@@ -775,11 +803,7 @@ export class WsClient {
 
         conversation.updatedAt = data.updatedAt;
 
-        const participants = new Set([conversation.createdBy]);
-
-        data.participants?.forEach(p => participants.add(p.trim()));
-
-        conversation.participants = Array.from(participants);
+        conversation.participants = data.participants!;
 
         const response = await store.saveConversation(conversation);
 
@@ -801,7 +825,7 @@ export class WsClient {
             return null;
         }
 
-        const conversation = await store.getConversationById(id);
+        const conversation = await store.getParticipantConversationById(this.id, id);
 
         if (!conversation) {
             //Only creator can close or delete conversation
@@ -873,7 +897,7 @@ export class WsClient {
                 {
                     const {conversationId} = request.data as ConversationUpdate;
                     const now = new Date();
-                    let data: ConversationUpdate = {
+                    const data: ConversationUpdate = {
                         conversationId,
                         closedAt: now,
                     };
@@ -883,7 +907,7 @@ export class WsClient {
                         data.deletedAt = now;
                     }
 
-                    let type: QueueMessageType | null = await this.closeDeleteConversation(data, del);
+                    const type: QueueMessageType | null = await this.closeDeleteConversation(data, del);
                     if (type) {
 
                         this.send({ type, clientMessageId, data });
@@ -898,10 +922,14 @@ export class WsClient {
             case 'update':
                 {
                     const {conversationId, title, participants} = request.data as ConversationUpdate;
-                    let data: ConversationUpdate = {
+                    const participantsSet = new Set([this.id!]);
+
+                    participants?.forEach(p => participantsSet.add(p.trim()));
+
+                    const data: ConversationUpdate = {
                         conversationId,
                         title,
-                        participants,
+                        participants: Array.from(participantsSet),
                         updatedAt: new Date(),
                     };
 
@@ -960,6 +988,7 @@ export class WsClient {
                 broadcastType = 'message-updated';
                 break;
             case 'message-delete':
+                (request.data as MessageDelete).deletedAt = new Date();
                 if (!await this.deleteMessage(request.data as MessageDelete)) {
                     return false;
                 }
@@ -1016,24 +1045,25 @@ export class WsClient {
         return this.publishMessage('connected', undefined, null, false);
     }
 
-    private async getConversations(from: number = 0, conversationsSize?: number, excludeIds?: string[]): Promise<ConversationsResult> {
+    private async getConversations(from: number = 0, conversationsSize?: number, ids?: string[], excludeIds?: string[]): Promise<ConversationsResult> {
 
         const size = conversationsSize != null && conversationsSize >= 0 ? conversationsSize : defaultSize;
 
-        const result = await store.getParticipantConversations(this.id!, excludeIds || [], from, size);
+        const result = await store.getParticipantConversations(this.id!, ids, excludeIds, from, size);
 
-        const ids = result.conversations.map(c => c.id!);
+        const conversationIds = result.conversations.map(c => c.id!);
 
-        if (!ids?.length) {
+        if (!conversationIds?.length) {
             return result;
         }
 
-        const messagesInfo = await store.getLastMessagesTimestamps(this.id!, ids);
+        const messagesInfo = await store.getLastMessagesTimestamps(this.id!, conversationIds);
 
         const conversations = result.conversations.map(c => ({
             ...c,
             leftAt: c.id! in messagesInfo ? messagesInfo[c.id!].left : undefined,
             latestMessage: c.id! in messagesInfo ? messagesInfo[c.id!].latest : undefined,
+            connected: c.participants.filter(p => WsClient.joinedParticipants.get(c.id!)?.has(p)),
         }));
 
         return {
@@ -1045,7 +1075,7 @@ export class WsClient {
     }
 
     private async findMessages(request: FindRequest, clientMessageId?: string): Promise<void> {
-        const result = await store.getParticipantConversations(this.id!, [], request.from ?? 0, request.size ?? defaultSize);
+        const result = await store.getParticipantConversations(this.id!, undefined, undefined, request.from ?? 0, request.size ?? defaultSize);
 
         if (request.conversationIds?.length) {
             request.conversationIds = Array.from(new Set(result.conversations.map(c => c.id!).concat(request.conversationIds)));
@@ -1084,7 +1114,7 @@ export class WsClient {
     }
 
     private async loadConversations(request: LoadRequest, clientMessageId?: string): Promise<void> {
-        const result = await this.getConversations(request.from, request.size, request.excludeIds);
+        const result = await this.getConversations(request.from, request.size, request.ids, request.excludeIds);
 
         this.send({ type: 'loaded', clientMessageId, conversations: result.conversations, count: result.total });
     }

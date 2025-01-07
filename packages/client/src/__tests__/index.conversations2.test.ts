@@ -118,7 +118,7 @@ describe('client', () => {
             data: null,
         });
 
-        let storedConversation = await store.getConversationById(conversationId);
+        let storedConversation = await store.getParticipantConversationById(userName, conversationId);
         expect(storedConversation).toEqual({
             id: conversationId,
             title,
@@ -142,6 +142,7 @@ describe('client', () => {
             data: null,
         });
 
+        expect(WsClient.joinedParticipants.get(conversationId)?.size).toBe(1);
         expect(WsClient.conversations.size).toBe(1);
         const info = WsClient.conversations.get(conversationId);
         expect(info).not.toBeNull();
@@ -149,7 +150,7 @@ describe('client', () => {
         expect(info!.clients).toHaveLength(1);
         expect(info!.clients[0]).toEqual(client);
 
-        let newParticipants = [userName, ' test3 '];
+        let newParticipants = [' test3 '];
         const updateConversationData = {
             title: 'new title',
             participants: newParticipants,
@@ -165,7 +166,8 @@ describe('client', () => {
 
         [, msg] = await Promise.all(mockTransport.sendToClient(data));
 
-        newParticipants = newParticipants.map(p => p.trim());
+        newParticipants = [userName, ...newParticipants.map(p => p.trim())];
+        updateConversationData.participants = newParticipants;
 
         expect(msg).toHaveLength(msgCount + 2);
         expect(msg[msgCount++]).toBe(`{"type":"updated","data":${JSON.stringify(updateConversationData)}}`);
@@ -231,7 +233,7 @@ describe('client', () => {
             data: closedConversationData,
         });
 
-        storedConversation = await store.getConversationById(conversationId);
+        storedConversation = await store.getParticipantConversationById(userName, conversationId);
         expect(storedConversation).toEqual({
             id: conversationId,
             participants: newParticipants,
@@ -352,6 +354,7 @@ describe('client', () => {
             data: null,
         });
 
+        expect(WsClient.joinedParticipants.size).toBe(0);
         expect(WsClient.connectedClients.size).toBe(0);
         expect(WsClient.watchers.size).toBe(0);
         expect(WsClient.conversations.size).toBe(0);

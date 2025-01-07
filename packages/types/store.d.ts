@@ -38,6 +38,7 @@ export interface TextMessage {
 
 export interface MessageDelete {
     messageId: string
+    deletedAt: Date
 }
 
 export interface MessageUpdate extends Partial<FileMessage>, Partial<TextMessage> {
@@ -102,10 +103,9 @@ export interface ConversationsResult {
 
 export interface MessageStore {
     findMessages: (r: FindRequest) => Promise<FindResult>
-    getConversationById: (id: string) => Promise<Conversation | undefined>
     getLastMessagesTimestamps: (fromId: string, conversationId: string[]) => Promise<ConversationLastMessages>
     getParticipantConversationById: (participant: string | undefined, id: string) => Promise<Conversation | undefined>
-    getParticipantConversations: (participant: string, excludeIds: string[], from: number, size: number) => Promise<ConversationsResult>
+    getParticipantConversations: (participant: string, ids: string[] | undefined, excludeIds: string[] | undefined, from: number | undefined, size: number | undefined) => Promise<ConversationsResult>
     getParticipantLastMessage: (participant: string, conversationId: string) => Promise<Message | undefined>
     getPeerToPeerConversationId(peer1: string, peer2: string): Promise<string | undefined>
     saveConnection: (userId: string, instanceId: string) => Promise<SaveResponse>
