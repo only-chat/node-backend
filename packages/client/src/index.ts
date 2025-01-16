@@ -70,7 +70,7 @@ const defaultSize = 100;
 
 const sendStates = [WsClientState.Connected, WsClientState.Session, WsClientState.WatchSession];
 
-const connectedRequestTypes: RequestType[] = ['close', 'delete', 'load', 'update'];
+const connectedRequestTypes: RequestType[] = ['close', 'delete', 'find', 'load', 'update'];
 
 const types: StoreMessageType[] = ['file', 'text'];
 
@@ -895,7 +895,7 @@ export class WsClient {
             case 'close':
             case 'delete':
                 {
-                    const {conversationId} = request.data as ConversationUpdate;
+                    const { conversationId } = request.data as ConversationUpdate;
                     const now = new Date();
                     const data: ConversationUpdate = {
                         conversationId,
@@ -916,12 +916,15 @@ export class WsClient {
                     }
                 }
                 break;
+            case 'find':
+                await this.findMessages(request.data as FindRequest, clientMessageId);
+                return true;
             case 'load':
                 await this.loadConversations(request.data as LoadRequest, clientMessageId);
                 return true;
             case 'update':
                 {
-                    const {conversationId, title, participants} = request.data as ConversationUpdate;
+                    const { conversationId, title, participants } = request.data as ConversationUpdate;
                     const participantsSet = new Set([this.id!]);
 
                     participants?.forEach(p => participantsSet.add(p.trim()));
@@ -995,9 +998,6 @@ export class WsClient {
 
                 broadcastType = 'message-deleted';
                 break;
-            case 'find':
-                await this.findMessages(request.data as FindRequest, request.clientMessageId);
-                return true;
             case 'load-messages':
                 await this.loadMessages(request.data as LoadRequest, request.clientMessageId);
                 return true;
@@ -1075,14 +1075,9 @@ export class WsClient {
     }
 
     private async findMessages(request: FindRequest, clientMessageId?: string): Promise<void> {
-        const result = await store.getParticipantConversations(this.id!, undefined, undefined, request.from ?? 0, request.size ?? defaultSize);
+        const result = await store.getParticipantConversations(this.id!, request.conversationIds, undefined, request.from ?? 0, request.size ?? defaultSize);
 
-        if (request.conversationIds?.length) {
-            request.conversationIds = Array.from(new Set(result.conversations.map(c => c.id!).concat(request.conversationIds)));
-        }
-        else {
-            request.conversationIds = result.conversations.map(c => c.id!);
-        }
+        request.conversationIds = result.conversations.map(c => c.id!);
 
         const findResult: FindResult = await store.findMessages(request);
 
