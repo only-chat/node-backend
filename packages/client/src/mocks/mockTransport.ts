@@ -16,7 +16,7 @@ export class MockTransport implements Transport {
     public closedByClient?: boolean;
 
     public closeResolve: ((data: { code?: number, data?: string | Buffer }) => void) | undefined;
-    public closeReject: () => void = () => { };
+    public closeReject: ((e) => void) | undefined = () => { };
 
     public resolve1: ((msg: string[]) => void) | undefined;
     public reject1: () => void = () => { };
@@ -44,7 +44,16 @@ export class MockTransport implements Transport {
         }
 
         const p = this.getMessages();
-        this.messageListeners.forEach(l => l(Buffer.from(data), false));
+
+        try {
+            this.messageListeners.forEach(l => l(Buffer.from(data), false));
+        } catch (e) {
+            if (this.closeReject) {
+                this.closeReject(e);
+                this.closeReject = undefined;
+            }
+        }
+
         return p;
     }
 
@@ -58,11 +67,19 @@ export class MockTransport implements Transport {
             this.closeReject = reject;
         });
 
-        this.messageListeners.forEach(l => l(Buffer.from(data), false));
+        try {
+            this.messageListeners.forEach(l => l(Buffer.from(data), false));
+        } catch (e) {
+            if (this.closeReject) {
+                this.closeReject(e);
+                this.closeReject = undefined;
+            }
+        }
+
         return p;
     }
 
-    closeToClient(data?: string): Promise<{ code?: number, data?: string | Buffer }> {
+    closeToClient(data: string): Promise<{ code?: number, data?: string | Buffer }> {
         if (this.readyState >= TransportState.CLOSING) {
             return Promise.resolve({ code: 1000, data });
         }
@@ -72,7 +89,14 @@ export class MockTransport implements Transport {
             this.closeReject = reject;
         });
 
-        this.closeListeners.forEach(l => l(data, false));
+        try {
+            this.closeListeners.forEach(l => l(Buffer.from(data), false));
+        } catch (e) {
+            if (this.closeReject) {
+                this.closeReject(e);
+                this.closeReject = undefined;
+            }
+        }
         return p;
     };
 
