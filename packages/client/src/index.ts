@@ -614,11 +614,14 @@ export class WsClient {
                 throw new Error('Binary message received!');
             }
 
-            if (sendStates.includes(this.state)) {
-                const msg: Request = JSON.parse(data.toString());
+            const msg: Request|ConnectRequest|undefined = JSON.parse(data?.toString()); 
 
-                if (connectedRequestTypes.includes(msg.type)) {
-                    this.processRequest(msg).then(result => {
+            if (msg && sendStates.includes(this.state)) {
+
+                const request = msg as Request;
+
+                if (request && connectedRequestTypes.includes(request.type)) {
+                    this.processRequest(request).then(result => {
                         if (!result) {
                             this.stop('Failed processRequest');
                         }
@@ -633,21 +636,24 @@ export class WsClient {
             switch (this.state) {
                 case WsClientState.None:
                     {
-                        const request: ConnectRequest = JSON.parse(data.toString());
-                        this.connect(request).then(response => {
-                            if (!response) {
-                                this.stop('Failed connect');
-                            }
-                        }).catch(e => {
-                            this.stop('Failed connect', e);
-                        });
+                        const request: ConnectRequest = msg as ConnectRequest;
+                        if (request) {
+                            this.connect(request).then(response => {
+                                if (!response) {
+                                    this.stop('Failed connect');
+                                }
+                            }).catch(e => {
+                                this.stop('Failed connect', e);
+                            });
+                        } else {
+                            this.stop('Failed connect');
+                        }
                     }
                     break;
                 case WsClientState.Connected:
                     {
-                        const request: Request = JSON.parse(data.toString());
-
-                        switch (request.type) {
+                        const request: Request = msg as Request;
+                        switch (request?.type) {
                             case 'join':
                                 this.join(request).then(response => {
                                     if (!response) {
@@ -670,8 +676,7 @@ export class WsClient {
                 case WsClientState.Session:
                 case WsClientState.WatchSession:
                     {
-                        const request: Request = JSON.parse(data.toString());
-
+                        const request: Request = msg as Request;
                         if (request) {
                             this.processConversationRequest(request).then(result => {
                                 if (!result) {
@@ -684,8 +689,6 @@ export class WsClient {
                             this.stop('Wrong message');
                         }
                     }
-                    break;
-                case WsClientState.Disconnected:
                     break;
             }
         }
