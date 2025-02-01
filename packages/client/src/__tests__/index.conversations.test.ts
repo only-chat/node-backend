@@ -49,6 +49,14 @@ describe('client', () => {
             createdAt: new Date('2024-01-01'),
         };
 
+        const conversation3 = {
+            id: '3',
+            participants: [userName, '1', '2'],
+            createdBy: '2',
+            createdAt: new Date('2024-01-01'),
+            deletedAt: new Date('2024-01-02'),
+        };
+
         let result1 = await store.saveConversation(conversation1);
         expect(result1._id).toBe('1');
         expect(result1.result).toBe('created');
@@ -56,6 +64,10 @@ describe('client', () => {
         let result2 = await store.saveConversation(conversation2);
         expect(result2._id).toBe('2');
         expect(result2.result).toBe('created');
+
+        let result3 = await store.saveConversation(conversation3);
+        expect(result3._id).toBe('3');
+        expect(result3.result).toBe('created');
 
         const userStore = await initializeUserStore();
 
@@ -84,7 +96,7 @@ describe('client', () => {
         expect(client.state).toBe(WsClientState.Connected);
         expect(msg).toHaveLength(msgCount + 1);
         expect(msg[msgCount - 1]).toBe(`{"type":"hello","instanceId":"${instanceId}"}`);
-        expect(msg[msgCount++]).toBe(`{"type":"connection","connectionId":"1","id":"${userName}","conversations":{"conversations":${JSON.stringify([{...conversation2, connected:[]}, {...conversation1, connected:[]}])},"from":0,"size":100,"total":2}}`);
+        expect(msg[msgCount++]).toBe(`{"type":"connection","connectionId":"1","id":"${userName}","conversations":{"conversations":${JSON.stringify([{ ...conversation2, connected: [] }, { ...conversation1, connected: [] }])},"from":0,"size":100,"total":2}}`);
         expect(queueMessages).toHaveLength(queueMessagesCount + 1);
         expect(queueMessages[queueMessagesCount++]).toEqual({
             instanceId: instanceId,
@@ -97,6 +109,24 @@ describe('client', () => {
 
         expect(WsClient.connectedClients.size).toBe(1);
         expect(WsClient.connectedClients.has(userName)).toBeTruthy();
+
+        const loadConversationsRequest = {
+            type: 'load',
+            data: {}
+        };
+
+        data = JSON.stringify(loadConversationsRequest);
+
+        msg = await Promise.any(mockTransport.sendToClient(data));
+
+        msgCount++;
+
+        expect(client.state).toBe(WsClientState.Connected);
+        expect(msg).toHaveLength(msgCount);
+
+        const loadedConversationsData = { type:'loaded', conversations: [{ ...conversation2, connected: [] }, { ...conversation1, connected: [] }], count: 2 };
+
+        expect(msg[msgCount - 1]).toBe(JSON.stringify(loadedConversationsData));
 
         const closeConversationRequest = {
             type: 'close',
@@ -295,15 +325,15 @@ describe('client', () => {
 
         const store = await initializeStore();
 
-        const conversation3 = {
-            id: '3',
+        const conversation4 = {
+            id: '4',
             participants: ['1', '2', '3'],
             createdBy: '2',
             createdAt: new Date('2024-01-03')
         };
 
-        let result3 = await store.saveConversation(conversation3);
-        expect(result3._id).toBe('3');
+        let result3 = await store.saveConversation(conversation4);
+        expect(result3._id).toBe(conversation4.id);
         expect(result3.result).toBe('created');
 
         const userStore = await initializeUserStore();
