@@ -674,7 +674,6 @@ export class WsClient {
                     }
                     break;
                 case WsClientState.Session:
-                case WsClientState.WatchSession:
                     {
                         const request: Request = msg as Request;
                         if (request) {
@@ -1088,9 +1087,6 @@ export class WsClient {
     }
 
     private async loadMessages(request: LoadRequest, clientMessageId?: string): Promise<void> {
-        if (!this.conversation?.id) {
-            return;
-        }
 
         const findRequest: FindRequest =
         {
@@ -1098,7 +1094,7 @@ export class WsClient {
             size: request.size,
             sort: 'createdAt',
             sortDesc: true,
-            conversationIds: [this.conversation.id],
+            conversationIds: [this.conversation!.id!],
             createdTo: request.before,
             types,
             excludeIds: request.excludeIds,
