@@ -34,6 +34,23 @@ describe('client', () => {
 
         const store = await initializeStore();
 
+        const userName = 'test';
+
+        let participants = [userName, 'test2'];
+        const title = 'conversationTitle';
+
+        const conversation1 = {
+            id: '1',
+            participants,
+            title,
+            createdBy: userName,
+            createdAt: currentTime,
+        };
+
+        let result1 = await store.saveConversation(conversation1);
+        expect(result1._id).toBe('1');
+        expect(result1.result).toBe('created');
+
         const userStore = await initializeUserStore();
 
         const response = await saveInstance();
@@ -52,7 +69,6 @@ describe('client', () => {
         expect(WsClient.watchers.size).toBe(0);
         expect(WsClient.conversations.size).toBe(0);
 
-        const userName = 'test';
         let data = JSON.stringify({ authInfo: { name: userName, password: 'test' }, conversationsSize: 100 });
 
         let msg = await Promise.any(mockTransport.sendToClient(data));
@@ -62,7 +78,7 @@ describe('client', () => {
         expect(client.state).toBe(WsClientState.Connected);
         expect(msg).toHaveLength(msgCount + 1);
         expect(msg[msgCount - 1]).toBe(`{"type":"hello","instanceId":"${instanceId}"}`);
-        expect(msg[msgCount++]).toBe(`{"type":"connection","connectionId":"1","id":"${userName}","conversations":{"conversations":[],"from":0,"size":100,"total":0}}`);
+        expect(msg[msgCount++]).toBe(`{"type":"connection","connectionId":"1","id":"${userName}","conversations":{"conversations":[${JSON.stringify({ ...conversation1, connected: [] })}],"from":0,"size":100,"total":1}}`);
 
         expect(queueMessages).toHaveLength(queueMessagesCount + 1);
         expect(queueMessages[queueMessagesCount++]).toEqual({
@@ -77,21 +93,14 @@ describe('client', () => {
         expect(WsClient.connectedClients.size).toBe(1);
         expect(WsClient.connectedClients.has(userName)).toBeTruthy();
 
-        let participants = [userName, ' test2 '];
-        const title = 'conversationTitle';
-
         data = JSON.stringify({
             type: 'join',
             data: {
-                id: null,
-                participants,
-                title,
+                conversationId: conversation1.id,
             }
         });
 
         [, msg] = await Promise.all(mockTransport.sendToClient(data));
-
-        participants = participants.map(p => p.trim());
 
         msgCount++;
 
@@ -102,7 +111,7 @@ describe('client', () => {
         const conversationId = '1';
         const connectionId = '1';
 
-        expect(msg[msgCount - 1]).toBe(`{"type":"conversation","conversation":{"id":"${conversationId}","participants":${JSON.stringify(participants)},"title":"${title}","createdBy":"${userName}","createdAt":"${jsonCurrentTime}"},"connected":["${userName}"]}`);
+        expect(msg[msgCount - 1]).toBe(`{"type":"conversation","conversation":{"id":"${conversationId}","participants":${JSON.stringify(participants)},"title":"${title}","createdBy":"${userName}","createdAt":"${jsonCurrentTime}"},"connected":["${userName}"],"messages":{"messages":[],"from":0,"size":100,"total":0}}`);
         expect(msg[msgCount++]).toBe(`{"type":"joined","id":"${id}","instanceId":"${instanceId}","conversationId":"${conversationId}","participants":${JSON.stringify(participants)},"connectionId":"${connectionId}","fromId":"${userName}","createdAt":"${jsonCurrentTime}","data":null}`);
 
         expect(queueMessages).toHaveLength(queueMessagesCount + 1);

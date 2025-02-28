@@ -83,7 +83,6 @@ describe('client', () => {
         data = JSON.stringify({
             type: 'join',
             data: {
-                id: null,
                 participants,
                 title,
             }

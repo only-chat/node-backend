@@ -82,7 +82,6 @@ async function wrongConversationRequest(itConversationRequest: (t: MockTransport
     data = JSON.stringify({
         type: 'join',
         data: {
-            id: null,
             participants,
             title,
         }

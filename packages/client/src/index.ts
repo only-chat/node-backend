@@ -150,21 +150,12 @@ export class WsClient {
         return true;
     }
 
-    private static addWatchClient(wc: WsClient): boolean {
-        if (wc.id) {
-            WsClient.watchers.set(wc.id, wc);
-            return true;
-        }
-
-        return false;
+    private static addWatchClient(wc: WsClient) {
+        WsClient.watchers.set(wc.id!, wc);
     }
 
     private static removeWatchClient(wc: WsClient): boolean {
-        if (!wc.id) {
-            return false;
-        }
-
-        const result = WsClient.watchers.delete(wc.id);
+        const result = WsClient.watchers.delete(wc.id!);
 
         if (result) {
             const toRemove: string[] = [];
@@ -614,7 +605,7 @@ export class WsClient {
                 throw new Error('Binary message received!');
             }
 
-            const msg: Request|ConnectRequest|undefined = JSON.parse(data?.toString()); 
+            const msg: Request | ConnectRequest | undefined = JSON.parse(data?.toString());
 
             if (msg && sendStates.includes(this.state)) {
 
@@ -703,8 +694,7 @@ export class WsClient {
                 WsClient.removeClient(this.conversation.id, this);
                 logger?.debug(`Client with id ${this.id} removed successfully`);
             }
-            else if (WsClientState.WatchSession === this.state) {
-                WsClient.removeWatchClient(this);
+            else if (WsClient.removeWatchClient(this)) {
                 logger?.debug(`Watch client with id ${this.id} removed successfully`);
             }
 
