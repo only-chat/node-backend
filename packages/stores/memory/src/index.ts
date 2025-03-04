@@ -1,4 +1,4 @@
-import type { Conversation, ConversationLastMessages, ConversationsResult, FindRequest, FindResult, Message, MessageStore, TextMessage, SaveResponse } from '@only-chat/types/store.js';
+import type { Conversation, ConversationLastMessages, ConversationIdResult, ConversationsResult, FindRequest, FindResult, Message, MessageStore, TextMessage, SaveResponse } from '@only-chat/types/store.js';
 
 let connectionId = 0;
 let conversationId = 0;
@@ -246,11 +246,12 @@ async function getParticipantLastMessage(participant: string, conversationId: st
     return lastFromId ? messages.get(lastFromId) : undefined;
 }
 
-async function getPeerToPeerConversationId(peer1: string, peer2: string): Promise<string | undefined> {
+async function getPeerToPeerConversationId(peer1: string, peer2: string): Promise<ConversationIdResult | undefined> {
     const id = [peer1, peer2].sort(undefined).join('-');
     let peerToPeerConversationId = peerToPeerConversations.get(id);
+    const create = !peerToPeerConversationId;
 
-    if (!peerToPeerConversationId) {
+    if (create) {
         peerToPeerConversationId = (++conversationId).toString();
         conversations.set(peerToPeerConversationId, {
             conversation: {
@@ -264,7 +265,7 @@ async function getPeerToPeerConversationId(peer1: string, peer2: string): Promis
         peerToPeerConversations.set(id, peerToPeerConversationId);
     }
 
-    return peerToPeerConversationId;
+    return { id: peerToPeerConversationId, result: create ? 'created' : undefined };
 }
 
 async function saveConnection(userId: string, instanceId: string): Promise<SaveResponse> {

@@ -94,6 +94,11 @@ export interface SaveResponse {
 
 export type ConversationLastMessages = Record<string, { latest?: Message, left?: Date }>
 
+export interface ConversationIdResult {
+    id?: string
+    result?: string
+}
+
 export interface ConversationsResult {
     conversations: Conversation[]
     from: number
@@ -105,9 +110,9 @@ export interface MessageStore {
     findMessages: (r: FindRequest) => Promise<FindResult>
     getLastMessagesTimestamps: (fromId: string, conversationId: string[]) => Promise<ConversationLastMessages>
     getParticipantConversationById: (participant: string | undefined, id: string) => Promise<Conversation | undefined>
-    getParticipantConversations: (participant: string, ids: string[] | undefined, excludeIds: string[] | undefined, from: number | undefined, size: number | undefined) => Promise<ConversationsResult>
+    getParticipantConversations: (participant: string, ids?: string[], excludeIds?: string[], from?: number, size?: number) => Promise<ConversationsResult>
     getParticipantLastMessage: (participant: string, conversationId: string) => Promise<Message | undefined>
-    getPeerToPeerConversationId(peer1: string, peer2: string): Promise<string | undefined>
+    getPeerToPeerConversationId(peer1: string, peer2: string): Promise<ConversationIdResult | undefined>
     saveConnection: (userId: string, instanceId: string) => Promise<SaveResponse>
     saveConversation: (c: Conversation) => Promise<SaveResponse>
     saveMessage: (m: Message) => Promise<SaveResponse>

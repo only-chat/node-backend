@@ -1,7 +1,7 @@
 import { Client, ClientOptions } from '@elastic/elasticsearch';
 
 import type { estypes } from '@elastic/elasticsearch';
-import type { Conversation, ConversationLastMessages, ConversationsResult, FindRequest, FindResult, Message, MessageStore, MessageType, SaveResponse } from '@only-chat/types/store.js';
+import type { Conversation, ConversationLastMessages, ConversationIdResult, ConversationsResult, FindRequest, FindResult, Message, MessageStore, MessageType, SaveResponse } from '@only-chat/types/store.js';
 
 export type { ClientOptions } from '@elastic/elasticsearch';
 
@@ -450,7 +450,7 @@ async function getParticipantLastMessage(participant: string, conversationId: st
     }
 }
 
-async function getPeerToPeerConversationId(peer1: string, peer2: string): Promise<string | undefined> {
+async function getPeerToPeerConversationId(peer1: string, peer2: string): Promise<ConversationIdResult | undefined> {
     const id = [peer1, peer2].sort(undefined).join('-');
 
     const request: estypes.SearchRequest = {
@@ -477,7 +477,7 @@ async function getPeerToPeerConversationId(peer1: string, peer2: string): Promis
     const conversationId = result.hits.hits?.[0]?._source?.conversationId;
 
     if (conversationId) {
-        return conversationId;
+        return { id: conversationId };
     }
 
     const saveResult = await client.index({
@@ -513,11 +513,11 @@ async function getPeerToPeerConversationId(peer1: string, peer2: string): Promis
 
         if (refreshResult._shards.successful > 0) {
             const result2: estypes.SearchResponseBody<PeerToPeerConversation> = await client.search(request);
-            return result2.hits.hits?.[0]?._source?.conversationId;
+            return { id: result2.hits.hits?.[0]?._source?.conversationId, result: saveResult.result };
         }
     }
 
-    return saveResult._id;
+    return { id: saveResult._id, result: saveResult.result };
 }
 
 function saveConnection(userId: string, instanceId: string): Promise<SaveResponse> {

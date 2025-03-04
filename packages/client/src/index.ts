@@ -510,14 +510,16 @@ export class WsClient {
             const participantsArray = Array.from(participants);
 
             if (!data.title && participants.size == 2) {
-                conversationId = await store.getPeerToPeerConversationId(participantsArray[0], participantsArray[1]);
-                if (!conversationId) {
+                const conversationIdResult = await store.getPeerToPeerConversationId(participantsArray[0], participantsArray[1]);
+                if (!conversationIdResult?.id) {
                     this.lastError = 'Unable to get peer to peer conversation identifier';
                     logger?.error(this.lastError);
                     return false;
                 }
 
-                conversation = await store.getParticipantConversationById(this.id, conversationId);
+                created = conversationIdResult.result === 'created';
+                conversationId = conversationIdResult?.id;
+                conversation = await store.getParticipantConversationById(undefined, conversationId);
             } else if (!data.title) {
                 this.lastError = "Conversation title required";
                 return false;
@@ -536,13 +538,15 @@ export class WsClient {
                     participants: participantsArray,
                     title: conversation?.title ?? data.title,
                     createdBy: conversation?.createdBy ?? this.id!,
-                    updatedAt: conversation?.createdAt ? now : undefined,
                     createdAt: conversation?.createdAt ?? now,
+                    updatedAt: conversation?.createdAt ? now : undefined,
                 };
 
                 const response = await store.saveConversation(conversation);
 
-                created = response.result === 'created';
+                if (!created) {
+                    created = response.result === 'created';
+                }
 
                 if (!created && response.result !== 'updated') {
                     logger?.error(`Save conversation with id ${conversation.id} failed`);

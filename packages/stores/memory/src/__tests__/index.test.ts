@@ -1,5 +1,6 @@
-import { describe, expect, beforeEach, it } from '@jest/globals';
+import { jest, describe, expect, beforeEach, it } from '@jest/globals';
 import { initialize } from '../index.js';
+import type { Message, MessageStore } from '@only-chat/types/store.js';
 
 const conversation1 = {
     id: '1',
@@ -29,8 +30,11 @@ const conversation4 = {
     createdAt: new Date('2024-01-01')
 };
 
+const currentTime = new Date('2024-08-01T00:00:00.000Z');
+jest.useFakeTimers().setSystemTime(currentTime);
+
 describe('saveMessage', () => {
-    let store;
+    let store: MessageStore;
 
     beforeEach(async () => {
         store = await initialize();
@@ -47,7 +51,7 @@ describe('saveMessage', () => {
             text: 'Hello, world!',
         };
 
-        result = await store.saveMessage(message);
+        result = await store.saveMessage(message as unknown as Message);
 
         expect(result._id).toBe('1');
         expect(result.result).toBe('created');
@@ -64,11 +68,11 @@ describe('saveMessage', () => {
             text: 'Hello, world!',
         };
 
-        await store.saveMessage(message);
+        await store.saveMessage(message as unknown as Message);
 
         message.text = 'Updated message';
 
-        result = await store.saveMessage(message);
+        result = await store.saveMessage(message as unknown as Message);
 
         expect(result._id).toBe('1');
         expect(result.result).toBe('updated');
@@ -223,5 +227,29 @@ describe('findMessages', () => {
 
         expect(result.messages).toHaveLength(0);
         expect(result.total).toBe(0);
+    });
+});
+
+describe('conversations', () => {
+    it('should create peer to peer conversation', async () => {
+        const store = await initialize();
+
+        const result1 = await store.getPeerToPeerConversationId('user1', 'user2');
+
+        const id = '1';
+
+        expect(result1).toEqual({
+            id,
+            result: 'created',
+        });
+
+        const result2 = await store.getParticipantConversationById(undefined, id);
+
+        expect(result2).toEqual({
+            id,
+            participants: [],
+            createdBy: '',
+            createdAt: currentTime,
+        });
     });
 });
