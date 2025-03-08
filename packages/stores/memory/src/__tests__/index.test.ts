@@ -76,6 +76,15 @@ describe('saveMessage', () => {
 
         expect(result._id).toBe('1');
         expect(result.result).toBe('updated');
+
+        const findResult = await store.findMessages({ conversationIds: [conversation1.id] });
+
+        expect(findResult).toEqual({
+            messages: [message],
+            from: 0,
+            size: 100,
+            total: 1,
+        });
     });
 });
 

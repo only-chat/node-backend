@@ -300,7 +300,9 @@ async function saveMessage(m: Message): Promise<SaveResponse> {
 
     messages.set(_id, { ...m, id: _id });
 
-    conversations.get(conversationId)?.messages.push(_id);
+    if (!exists) {
+        conversations.get(conversationId)?.messages.push(_id);
+    }
 
     return {
         _id,
