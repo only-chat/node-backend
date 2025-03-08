@@ -10,3 +10,5 @@ The repository contains implementations of Elasticsearch and RabbitMQ stores and
 It only contains a stub version of the user store, as it is very business-specific and highly dependent on the client's environment.
 
 There are also in-memory store and queue versions, which are mainly used for testing purposes.
+
+It is available for playing by url http://github.vyatkin.com/only-chat-client
