@@ -111,7 +111,7 @@ async function findMessages(r: FindRequest): Promise<FindResult> {
 
 async function getLastMessagesTimestamps(participant: string, conversationId: string[]): Promise<ConversationLastMessages> {
     const result: ConversationLastMessages = {};
-    for (const id in conversationId) {
+    for (const id of conversationId) {
         const c = conversations.get(id);
         if (!c || c.conversation.deletedAt || c.messages.length < 1) {
             continue

@@ -40,6 +40,13 @@ const conversation5 = {
     deletedAt: new Date('2024-02-02'),
 };
 
+const conversation6 = {
+    id: '6',
+    participants: ['user6', 'user5'],
+    createdBy: '5',
+    createdAt,
+};
+
 const time = new Date('2024-01-01');
 const mockMessages: Message[] = [
     { id: '1', connectionId: '1', conversationId: conversation1.id, type: 'text', clientMessageId: 'client1', fromId: 'user1', data: { text: 'Hello' }, createdAt: time, updatedAt: time },
@@ -52,6 +59,7 @@ const mockMessages: Message[] = [
     { id: '8', connectionId: '4', conversationId: conversation1.id, type: 'wrong_type' as MessageType, clientMessageId: 'client1', fromId: 'user1', data: { text: 'Hello' }, createdAt: time, updatedAt: time },
     { id: '9', connectionId: '5', conversationId: conversation2.id, type: 'text', clientMessageId: 'client1', fromId: 'user2', data: { text: 'Mock message 3' }, createdAt: new Date('2026-01-31') },
     { id: '10', connectionId: '6', conversationId: conversation3.id, type: 'text', clientMessageId: 'client1', fromId: 'user1', data: { text: 'Hello' }, createdAt: new Date('2025-01-01'), updatedAt: time },
+    { id: '11', connectionId: '7', conversationId: conversation6.id, type: 'left', clientMessageId: 'client1', fromId: 'user1', data: {}, createdAt: time },
 ];
 
 const currentTime = new Date('2024-08-01T00:00:00.000Z');
@@ -84,12 +92,18 @@ describe('saveMessage', () => {
         expect(result.result).toBe('created');
 
         const message = {
-            id: '1',
+            id: '2',
             conversationId: conversation1.id,
             text: 'Hello, world!',
         };
 
         result = await store.saveMessage(message as unknown as Message);
+
+        expect(result._id).toBe('2');
+        expect(result.result).toBe('created');
+
+        const message2 = { connectionId: '7', type: 'text', clientMessageId: 'client1', fromId: 'user7', data: { text: 'Hello' }, createdAt: new Date('2025-01-01'), updatedAt: time };
+        result = await store.saveMessage(message2 as unknown as Message);
 
         expect(result._id).toBe('1');
         expect(result.result).toBe('created');
@@ -226,7 +240,7 @@ describe('findMessages', () => {
             sort: 'createdAt',
             sortDesc: true,
             size: 10,
-            from: 0,
+            from: -1,
         };
 
         const result1 = await store.findMessages(request);
@@ -298,9 +312,16 @@ describe('conversations', () => {
             result: 'created',
         });
 
-        const result2 = await store.getParticipantConversationById(undefined, id);
+        const result2 = await store.getPeerToPeerConversationId('user1', 'user2');
 
         expect(result2).toEqual({
+            id,
+            result: undefined,
+        });
+
+        const result3 = await store.getParticipantConversationById(undefined, id);
+
+        expect(result3).toEqual({
             id,
             participants: [],
             createdBy: '',
@@ -319,15 +340,18 @@ describe('conversation messages', () => {
         expect(r.result).toBe('created');
         r = await store.saveConversation(conversation3);
         expect(r.result).toBe('created');
+        r = await store.saveConversation(conversation4);
+        expect(r.result).toBe('created');
         r = await store.saveConversation(conversation5);
         expect(r.result).toBe('created');
-
+        r = await store.saveConversation(conversation6);
+        expect(r.result).toBe('created');
         for (const message of mockMessages) {
             r = await store.saveMessage(message);
             expect(r.result).toBe('created');
         }
 
-        const result = await store.getLastMessagesTimestamps('user1', ['1', '2', '5']);
+        const result = await store.getLastMessagesTimestamps('user1', [conversation1.id, conversation2.id, conversation4.id, conversation5.id, conversation6.id]);
 
         expect(result).toEqual({
             '1': {
@@ -337,6 +361,10 @@ describe('conversation messages', () => {
             '2': {
                 latest: { ...mockMessages[8] },
                 left: undefined,
+            },
+            '6': {
+                latest: undefined,
+                left: time,
             },
         });
 
@@ -352,7 +380,7 @@ describe('conversation messages', () => {
         const result5 = await store.getParticipantLastMessage('user5', '5');
         expect(result5).toBeUndefined();
 
-        const result6 = await store.getParticipantLastMessage('user5', '6');
+        const result6 = await store.getParticipantLastMessage('user5', '7');
         expect(result6).toBeUndefined();
     });
 });
@@ -363,7 +391,7 @@ describe('conversations', () => {
 
         let r = await store.saveConversation(conversation1);
         expect(r.result).toBe('created');
-        
+
         r = await store.saveConversation(conversation5);
         expect(r.result).toBe('created');
 
@@ -371,6 +399,19 @@ describe('conversations', () => {
         expect(result1).toBeUndefined();
 
         const result2 = await store.getParticipantConversationById('user6', conversation5.id);
-        expect(result2).toBeUndefined(); 
+        expect(result2).toBeUndefined();
+    });
+
+    it('should save conversations', async () => {
+        const store = await initialize();
+
+        const r = await store.saveConversation({
+            participants: ['user1', 'user2'],
+            createdBy: '1',
+            createdAt,
+        });
+
+        expect(r._id).toBe('1');
+        expect(r.result).toBe('created');
     });
 });
