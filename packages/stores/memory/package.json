@@ -1,6 +1,6 @@
 {
   "name": "@only-chat/in-memory-store",
-  "version": "0.2.0-beta.17",
+  "version": "0.2.0-beta.18",
   "description": "In memory storage for only-chat",
   "homepage": "https://github.com/only-chat/node-backend/packages/stores/memory",
   "main": "dist/index.js",

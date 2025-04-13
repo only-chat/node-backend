@@ -85,10 +85,6 @@ async function findMessages(r: FindRequest): Promise<FindResult> {
         const sortOrder = r.sortDesc ? 'desc' : 'asc';
 
         m.sort((msg1, msg2) => {
-            if (msg1[r.sort!] === msg2[r.sort!]) {
-                return 0;
-            }
-
             if (sortOrder == 'desc') {
                 return msg1[r.sort!] > msg2[r.sort!] ? -1 : 1;
             }
@@ -123,20 +119,12 @@ async function getLastMessagesTimestamps(participant: string, conversationId: st
 
         const latest = c.messages.findLast(m => {
             const msg = messages.get(m);
-            if (!msg) {
-                return false;
-            }
-
-            return !msg.deletedAt && (['file', 'text'] as (string | undefined)[]).includes(msg.type);
+            return !msg!.deletedAt && (['file', 'text'] as (string | undefined)[]).includes(msg!.type);
         });
 
         const lastFromId = c.messages.findLast(m => {
             const msg = messages.get(m);
-            if (!msg) {
-                return false;
-            }
-
-            return !msg.deletedAt && msg.fromId === participant;
+            return !msg!.deletedAt && msg!.fromId === participant;
         });
 
         result[id] = {
@@ -174,19 +162,8 @@ async function getParticipantConversations(participant: string, ids: string[] | 
     const filteredConversations = Array.from(conversations.values(), v => v.conversation).filter(c => ids ? ids.includes(c.id!) : true && !excludeIds.includes(c.id!));
     const sortedConversations = filteredConversations.sort((a, b) => {
         if (a.createdAt == b.createdAt) {
-            if (a.id === b.id) {
-                return 0;
-            }
-
             return a.id! < b.id! ? 1 : -1;
         }
-
-        if (a.createdAt == undefined)
-            return -1;
-
-        if (b.createdAt == undefined)
-            return 1;
-
 
         return a.createdAt < b.createdAt ? 1 : -1;
     });
@@ -199,11 +176,9 @@ async function getParticipantConversations(participant: string, ids: string[] | 
             if (c.participants.includes(participant)) {
                 ++total;
                 if (start < 1) {
-                    if (result.length > size) {
-                        continue;
+                    if (result.length < size) {
+                        result.push(c);
                     }
-
-                    result.push(c);
                 } else {
                     --start;
                 }
@@ -236,11 +211,7 @@ async function getParticipantLastMessage(participant: string, conversationId: st
 
     const lastFromId = c.messages.findLast(m => {
         const msg = messages.get(m);
-        if (!msg) {
-            return false;
-        }
-
-        return !msg.deletedAt && msg.fromId === participant;
+        return !msg!.deletedAt && msg!.fromId === participant;
     });
 
     return lastFromId ? messages.get(lastFromId) : undefined;
