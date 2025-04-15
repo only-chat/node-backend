@@ -51,15 +51,16 @@ const time = new Date('2024-01-01');
 const mockMessages: Message[] = [
     { id: '1', connectionId: '1', conversationId: conversation1.id, type: 'text', clientMessageId: 'client1', fromId: 'user1', data: { text: 'Hello' }, createdAt: time, updatedAt: time },
     { id: '2', connectionId: '1', conversationId: conversation1.id, type: 'text', clientMessageId: 'client2', fromId: 'user1', data: { text: 'Mock message 2' }, createdAt: new Date('2021-01-01'), updatedAt: time },
-    { id: '3', connectionId: '1', conversationId: conversation2.id, type: 'text', clientMessageId: 'client3', fromId: 'user2', data: { text: 'Mock message 3' }, createdAt: time, updatedAt: time },
+    { id: '3', connectionId: '1', conversationId: conversation2.id, type: 'text', clientMessageId: 'client3', fromId: 'user2', data: { text: 'Mock message 3' }, createdAt, updatedAt: time },
     { id: '4', connectionId: '1', conversationId: conversation2.id, type: 'text', clientMessageId: 'client4', fromId: 'user2', data: { text: 'Mock message 4' }, createdAt: time, updatedAt: time },
     { id: '5', connectionId: '2', conversationId: conversation3.id, type: 'text', clientMessageId: 'client1', fromId: 'user1', data: { text: 'Hello' }, createdAt: time, updatedAt: time },
-    { id: '6', connectionId: '2', conversationId: conversation3.id, type: 'text', clientMessageId: 'client1', fromId: 'user1', data: { text: 'Hello' }, createdAt: time, deletedAt: time },
-    { id: '7', connectionId: '3', conversationId: conversation1.id, type: 'text', clientMessageId: 'client1', fromId: 'user3', data: { text: 'Hello' }, createdAt: time, updatedAt: time },
+    { id: '6', connectionId: '2', conversationId: conversation3.id, type: 'text', clientMessageId: 'client1', fromId: 'user1', data: { text: 'Hello' }, createdAt: new Date('2023-01-02'), deletedAt: time },
+    { id: '7', connectionId: '3', conversationId: conversation1.id, type: 'text', clientMessageId: 'client1', fromId: 'user3', data: { text: 'Hello' }, createdAt, updatedAt: time },
     { id: '8', connectionId: '4', conversationId: conversation1.id, type: 'wrong_type' as MessageType, clientMessageId: 'client1', fromId: 'user1', data: { text: 'Hello' }, createdAt: time, updatedAt: time },
     { id: '9', connectionId: '5', conversationId: conversation2.id, type: 'text', clientMessageId: 'client1', fromId: 'user2', data: { text: 'Mock message 3' }, createdAt: new Date('2026-01-31') },
     { id: '10', connectionId: '6', conversationId: conversation3.id, type: 'text', clientMessageId: 'client1', fromId: 'user1', data: { text: 'Hello' }, createdAt: new Date('2025-01-01'), updatedAt: time },
     { id: '11', connectionId: '7', conversationId: conversation6.id, type: 'left', clientMessageId: 'client1', fromId: 'user1', data: {}, createdAt: time },
+    { id: '12', connectionId: '6', conversationId: conversation3.id, type: 'text', clientMessageId: 'client1', fromId: 'user1', data: { text: 'Hello' }, createdAt: new Date('2024-12-01'), updatedAt: time },
 ];
 
 const currentTime = new Date('2024-08-01T00:00:00.000Z');
@@ -147,11 +148,11 @@ describe('findMessages', () => {
         store = await initialize();
         let r = await store.saveConversation(conversation1);
         expect(r.result).toBe('created');
-        r = await store.saveConversation(conversation2);
-        expect(r.result).toBe('created');
         r = await store.saveConversation(conversation3);
         expect(r.result).toBe('created');
         r = await store.saveConversation(conversation4);
+        expect(r.result).toBe('created');
+        r = await store.saveConversation(conversation2);
         expect(r.result).toBe('created');
 
         r = await store.saveConversation(conversation4);
@@ -178,7 +179,7 @@ describe('findMessages', () => {
     });
 
     it('should return participant conversations', async () => {
-        const result1 = await store.getParticipantConversations('user2', undefined, undefined, 1, 3);
+        const result1 = await store.getParticipantConversations('user2', ['1', '2', '3', '4'], ['6', '7'], 1, 3);
 
         expect(result1).toEqual({
             from: 1,
@@ -262,18 +263,20 @@ describe('findMessages', () => {
         request.conversationIds = [];
         const result3 = await store.findMessages(request);
 
-        expect(result3.messages).toHaveLength(2);
-        expect(result3.total).toBe(2);
+        expect(result3.messages).toHaveLength(3);
+        expect(result3.total).toBe(3);
         expect(result3.messages[0].id).toBe(mockMessages[9].id);
-        expect(result3.messages[1].id).toBe(mockMessages[0].id);
+        expect(result3.messages[1].id).toBe(mockMessages[11].id);
+        expect(result3.messages[2].id).toBe(mockMessages[0].id);
 
         request.sortDesc = false;
         const result4 = await store.findMessages(request);
 
-        expect(result4.messages).toHaveLength(2);
-        expect(result4.total).toBe(2);
-        expect(result4.messages[1].id).toBe(mockMessages[9].id);
+        expect(result4.messages).toHaveLength(3);
+        expect(result4.total).toBe(3);
         expect(result4.messages[0].id).toBe(mockMessages[0].id);
+        expect(result4.messages[1].id).toBe(mockMessages[11].id);
+        expect(result4.messages[2].id).toBe(mockMessages[9].id);
     });
 
     it('should return an empty array if no messages match the provided request', async () => {

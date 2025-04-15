@@ -159,7 +159,7 @@ async function getParticipantConversationById(participant: string | undefined, i
 async function getParticipantConversations(participant: string, ids: string[] | undefined, excludeIds: string[] = [], from: number = 0, size: number = 100): Promise<ConversationsResult> {
     const result: Conversation[] = [];
 
-    const filteredConversations = Array.from(conversations.values(), v => v.conversation).filter(c => ids ? ids.includes(c.id!) : true && !excludeIds.includes(c.id!));
+    const filteredConversations = Array.from(conversations.values(), v => v.conversation).filter(c => (ids ? ids.includes(c.id!) : true) && !excludeIds.includes(c.id!));
     const sortedConversations = filteredConversations.sort((a, b) => {
         if (a.createdAt == b.createdAt) {
             return a.id! < b.id! ? 1 : -1;
