@@ -255,90 +255,134 @@ describe('client', () => {
             });
         });
     });
+});
 
-    it('failed join', async () => {
-        const queue = await initializeQueue();
+async function failedJoin(itJoinRequest: (t: MockTransport) => Promise<void>) {
+    const queue = await initializeQueue();
 
-        let disconnectedResolve: ((value: Message) => void) | undefined;
+    let disconnectedResolve: ((value: Message) => void) | undefined;
 
-        let queueMessagesCount = 0;
-        const queueMessages: Message[] = [];
-        async function queueCallback(msg: Message) {
-            queueMessages.push(msg);
+    let queueMessagesCount = 0;
+    const queueMessages: Message[] = [];
+    async function queueCallback(msg: Message) {
+        queueMessages.push(msg);
 
-            if (disconnectedResolve && 'disconnected' === msg.type) {
-                disconnectedResolve(msg);
-            }
+        if (disconnectedResolve && 'disconnected' === msg.type) {
+            disconnectedResolve(msg);
         }
+    }
 
-        queue.subscribe(queueCallback);
+    queue.subscribe(queueCallback);
 
-        const store = await initializeStore();
+    const store = await initializeStore();
 
-        const userStore = await initializeUserStore();
+    const userStore = await initializeUserStore();
 
-        const response = await saveInstance();
+    const response = await saveInstance();
 
-        const instanceId = response._id;
+    const instanceId = response._id;
 
-        initializeClient({ queue, store, userStore, instanceId }, logger);
+    initializeClient({ queue, store, userStore, instanceId }, logger);
 
-        const mockTransport = new MockTransport();
+    const mockTransport = new MockTransport();
 
-        const client = new WsClient(mockTransport);
+    const client = new WsClient(mockTransport);
 
-        expect(client.state).toBe(WsClientState.None);
+    expect(client.state).toBe(WsClientState.None);
 
-        expect(WsClient.connectedClients.size).toBe(0);
-        expect(WsClient.watchers.size).toBe(0);
-        expect(WsClient.conversations.size).toBe(0);
+    expect(WsClient.connectedClients.size).toBe(0);
+    expect(WsClient.watchers.size).toBe(0);
+    expect(WsClient.conversations.size).toBe(0);
 
-        const userName = 'test';
-        let data = JSON.stringify({ authInfo: { name: userName, password: 'test' }, conversationsSize: 100 });
+    const userName = 'test';
+    let data = JSON.stringify({ authInfo: { name: userName, password: 'test' }, conversationsSize: 100 });
 
-        let msg = await Promise.any(mockTransport.sendToClient(data));
+    let msg = await Promise.any(mockTransport.sendToClient(data));
 
-        let msgCount = 1;
+    let msgCount = 1;
 
-        expect(client.state).toBe(WsClientState.Connected);
-        expect(msg).toHaveLength(msgCount + 1);
-        expect(msg[msgCount - 1]).toBe(`{"type":"hello","instanceId":"${instanceId}"}`);
-        expect(msg[msgCount++]).toBe(`{"type":"connection","connectionId":"1","id":"${userName}","conversations":{"conversations":[],"from":0,"size":100,"total":0}}`);
+    let connectionId = '1';
 
-        expect(queueMessages).toHaveLength(queueMessagesCount + 1);
-        expect(queueMessages[queueMessagesCount++]).toEqual({
-            instanceId,
-            connectionId: '1',
-            fromId: userName,
-            type: 'connected',
-            createdAt: currentTime,
-            data: null,
+    expect(client.state).toBe(WsClientState.Connected);
+    expect(msg).toHaveLength(msgCount + 1);
+    expect(msg[msgCount - 1]).toBe(`{"type":"hello","instanceId":"${instanceId}"}`);
+    expect(msg[msgCount++]).toBe(`{"type":"connection","connectionId":"${connectionId}","id":"${userName}","conversations":{"conversations":[],"from":0,"size":100,"total":0}}`);
+
+    expect(queueMessages).toHaveLength(queueMessagesCount + 1);
+    expect(queueMessages[queueMessagesCount++]).toEqual({
+        instanceId,
+        connectionId,
+        fromId: userName,
+        type: 'connected',
+        createdAt: currentTime,
+        data: null,
+    });
+
+    expect(WsClient.connectedClients.size).toBe(1);
+    expect(WsClient.connectedClients.has(userName)).toBeTruthy();
+
+    const disconnectedPromise = new Promise(resolve => {
+        disconnectedResolve = resolve;
+    });
+
+    await itJoinRequest(mockTransport);
+
+    expect(mockTransport.closedByClient).toBeTruthy();
+
+    const disconnectedMessage = await disconnectedPromise;
+
+    expect(disconnectedMessage).toEqual({
+        instanceId: instanceId,
+        connectionId,
+        fromId: userName,
+        type: 'disconnected',
+        createdAt: currentTime,
+        data: null,
+    });
+
+    expect(mockTransport.readyState).toBe(TransportState.CLOSED);
+    expect(client.state).toBe(WsClientState.Disconnected);
+
+    expect(WsClient.joinedParticipants.size).toBe(0);
+    expect(WsClient.connectedClients.size).toBe(0);
+    expect(WsClient.watchers.size).toBe(0);
+    expect(WsClient.conversations.size).toBe(0);
+
+    queue.unsubscribe?.(queueCallback);
+}
+
+describe('client', () => {
+    it('failed join', async () => {
+        await failedJoin(async (t) => {
+            const data = JSON.stringify({
+                type: 'join',
+                data: {
+                    participants: ['test', ' test2 ', 'test3'],
+                }
+            });
+    
+            const result = await t.sendToClientToClose(data);
+    
+            expect(result).toEqual({
+                code: 1000,
+                data: 'Failed join. Conversation title required',
+            });
         });
 
-        expect(WsClient.connectedClients.size).toBe(1);
-        expect(WsClient.connectedClients.has(userName)).toBeTruthy();
-
-        let participants = [userName, ' test2 ', 'test3'];
-
-        data = JSON.stringify({
-            type: 'join',
-            data: {
-                participants,
-            }
+        await failedJoin(async (t) => {
+            const data = JSON.stringify({
+                type: 'join',
+                data: {
+                    participants: [],
+                }
+            });
+    
+            const result = await t.sendToClientToClose(data);
+    
+            expect(result).toEqual({
+                code: 1000,
+                data: 'Failed join. Less than 2 participants',
+            });
         });
-
-        const result = await mockTransport.sendToClientToClose(data);
-
-        expect(result).toEqual({
-            code: 1000,
-            data: 'Failed join. Conversation title required',
-        });
-
-        expect(WsClient.joinedParticipants.size).toBe(0);
-        expect(WsClient.connectedClients.size).toBe(0);
-        expect(WsClient.watchers.size).toBe(0);
-        expect(WsClient.conversations.size).toBe(0);
-
-        queue.unsubscribe?.(queueCallback);
     });
 });
