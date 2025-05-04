@@ -301,7 +301,7 @@ describe('client', () => {
         });
 
         const deleteMessageData = {
-            messageId: id,
+            messageId: '2',
             deletedAt: currentTime,
         };
 
@@ -625,6 +625,97 @@ describe('client', () => {
         expect(result).toEqual({
             code: 1000,
             data: 'Failed processConversationRequest. Update message failed',
+        });
+
+        expect(WsClient.joinedParticipants.size).toBe(0);
+        expect(WsClient.connectedClients.size).toBe(0);
+        expect(WsClient.watchers.size).toBe(0);
+        expect(WsClient.conversations.size).toBe(0);
+
+        queue.unsubscribe?.(queueCallback);
+    });
+
+    it('failed workflow', async () => {
+        const queue = await initializeQueue();
+
+        let disconnectedResolve: ((value: Message) => void) | undefined;
+
+        let queueMessagesCount = 0;
+        const queueMessages: Message[] = [];
+        async function queueCallback(msg: Message) {
+            queueMessages.push(msg);
+
+            if (disconnectedResolve && 'disconnected' === msg.type) {
+                disconnectedResolve(msg);
+            }
+        }
+
+        queue.subscribe(queueCallback);
+
+        const store = await initializeStore();
+
+        const userStore = await initializeUserStore();
+
+        const response = await saveInstance();
+
+        const instanceId = response._id;
+
+        initializeClient({ queue, store, userStore, instanceId }, logger);
+
+        const mockTransport = new MockTransport();
+
+        const client = new WsClient(mockTransport);
+
+        expect(client.state).toBe(WsClientState.None);
+
+        expect(WsClient.connectedClients.size).toBe(0);
+        expect(WsClient.watchers.size).toBe(0);
+        expect(WsClient.conversations.size).toBe(0);
+
+        const userName = 'test';
+        let data = JSON.stringify({ authInfo: { name: userName, password: 'test' }, conversationsSize: 100 });
+
+        let msg = await Promise.any(mockTransport.sendToClient(data));
+
+        let msgCount = 1;
+
+        expect(client.state).toBe(WsClientState.Connected);
+        expect(msg).toHaveLength(msgCount + 1);
+        expect(msg[msgCount - 1]).toBe(`{"type":"hello","instanceId":"${instanceId}"}`);
+        expect(msg[msgCount++]).toBe(`{"type":"connection","connectionId":"1","id":"${userName}","conversations":{"conversations":[],"from":0,"size":100,"total":0}}`);
+
+        expect(queueMessages).toHaveLength(queueMessagesCount + 1);
+        expect(queueMessages[queueMessagesCount++]).toEqual({
+            instanceId: instanceId,
+            connectionId: '1',
+            fromId: userName,
+            type: 'connected',
+            createdAt: currentTime,
+            data: null,
+        });
+
+        expect(WsClient.connectedClients.size).toBe(1);
+        expect(WsClient.connectedClients.has(userName)).toBeTruthy();
+
+        let participants = [userName, ' test2 '];
+        const title = 'conversationTitle';
+
+        data = JSON.stringify({
+            type: 'join',
+            data: {
+                conversationId: null,
+                participants,
+                title,
+            }
+        });
+
+        store.saveMessage = async m => ({ _id: '', result: 'failed' });
+
+        const result = await mockTransport.sendToClientToClose(data);
+
+        expect(result).toEqual({
+            code: 1000,
+            data: 'Failed join. Index message failed',
         });
 
         expect(WsClient.joinedParticipants.size).toBe(0);

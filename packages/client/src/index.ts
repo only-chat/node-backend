@@ -400,8 +400,14 @@ export class WsClient {
             };
 
             const response = await store.saveMessage(m);
+
             if (response.result !== 'created') {
-                logger?.error(`Index message failed`);
+                const err = 'Index message failed';
+                if (!this.lastError) {
+                    this.lastError = err;
+                }
+
+                logger?.error(err);
                 return false;
             }
 
@@ -493,7 +499,7 @@ export class WsClient {
         if (data.conversationId) {
             conversation = await store.getParticipantConversationById(this.id, data.conversationId);
             if (!conversation?.id) {
-                this.lastError = "Wrong conversation";
+                this.lastError = 'Wrong conversation';
                 return false;
             }
         } else {
@@ -501,7 +507,7 @@ export class WsClient {
             participants.add(this.id!);
 
             if (participants.size < 2) {
-                this.lastError = "Less than 2 participants";
+                this.lastError = 'Less than 2 participants';
                 return false;
             }
 
@@ -521,7 +527,7 @@ export class WsClient {
                 conversationId = conversationIdResult?.id;
                 conversation = await store.getParticipantConversationById(undefined, conversationId);
             } else if (!data.title) {
-                this.lastError = "Conversation title required";
+                this.lastError = 'Conversation title required';
                 return false;
             }
 
@@ -550,7 +556,7 @@ export class WsClient {
 
                 if (!created && response.result !== 'updated') {
                     logger?.error(`Save conversation with id ${conversation.id} failed`);
-                    this.lastError = "Save conversation failed";
+                    this.lastError = 'Save conversation failed';
                     return false;
                 }
 
@@ -710,11 +716,17 @@ export class WsClient {
         const findResult = await store.findMessages({
             ids: [request.messageId],
             conversationIds: [this.conversation!.id!],
+            types,
         });
 
         const message = findResult.messages?.[0];
 
-        if (!message || message.fromId != this.id) {
+        if (!message) {
+            this.lastError = 'Wrong message';
+            return false;
+        }
+
+        if (message.fromId != this.id) {
             this.lastError = 'User is not allowed to delete message';
             return false;
         }
@@ -738,6 +750,7 @@ export class WsClient {
         const findResult = await store.findMessages({
             ids: [request.messageId],
             conversationIds: [this.conversation!.id!],
+            types,
         });
 
         const message = findResult.messages?.[0];

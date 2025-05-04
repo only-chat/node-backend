@@ -7,6 +7,7 @@ import { MockTransport } from '../mocks/mockTransport.js';
 
 import type { Log } from '@only-chat/types/log.js';
 import type { Message } from '@only-chat/types/queue.js';
+import { MessageStore, Message as StoreMessage } from '@only-chat/types/store.js';
 
 const logger: Log | undefined = undefined;
 
@@ -290,7 +291,7 @@ describe('client', () => {
 
         msg = await Promise.any(mockTransport.sendToClient(data));
         expect(msg).toHaveLength(msgCount + 1);
-        expect(msg[msgCount++]).toBe(`{"type":"loaded-messages","messages":${JSON.stringify([storedMessages.messages[storedMessagesCount-3]])},"count":1}`);
+        expect(msg[msgCount++]).toBe(`{"type":"loaded-messages","messages":${JSON.stringify([storedMessages.messages[storedMessagesCount - 3]])},"count":1}`);
 
         const findRequest = {
             type: 'find',
@@ -299,7 +300,7 @@ describe('client', () => {
                 size: 50,
                 sort: 'id',
                 sortDesc: true,
-                ids: ['1','2','3','5'],
+                ids: ['1', '2', '3', '5'],
                 clientMessageIds: [],
                 excludeIds: ['1'],
                 conversationIds: [conversationId],
@@ -315,7 +316,7 @@ describe('client', () => {
 
         msg = await Promise.any(mockTransport.sendToClient(data));
         expect(msg).toHaveLength(msgCount + 1);
-        expect(msg[msgCount++]).toBe(`{"type":"find","messages":${JSON.stringify([storedMessages.messages[storedMessagesCount-2], storedMessages.messages[storedMessagesCount-3]])},"from":0,"size":50,"total":2}`);
+        expect(msg[msgCount++]).toBe(`{"type":"find","messages":${JSON.stringify([storedMessages.messages[storedMessagesCount - 2], storedMessages.messages[storedMessagesCount - 3]])},"from":0,"size":50,"total":2}`);
 
         const findRequest2 = {
             type: 'find',
@@ -333,7 +334,7 @@ describe('client', () => {
 
         msg = await Promise.any(mockTransport.sendToClient(data));
         expect(msg).toHaveLength(msgCount + 1);
-        expect(msg[msgCount++]).toBe(`{"type":"find","messages":${JSON.stringify([storedMessages.messages[storedMessagesCount-4], storedMessages.messages[storedMessagesCount-3], storedMessages.messages[storedMessagesCount-2], storedMessages.messages[storedMessagesCount-1]])},"from":0,"size":100,"total":4}`);
+        expect(msg[msgCount++]).toBe(`{"type":"find","messages":${JSON.stringify([storedMessages.messages[storedMessagesCount - 4], storedMessages.messages[storedMessagesCount - 3], storedMessages.messages[storedMessagesCount - 2], storedMessages.messages[storedMessagesCount - 1]])},"from":0,"size":100,"total":4}`);
 
         const wrongRequest = {
             type: 'wrong',
@@ -419,7 +420,7 @@ describe('client', () => {
         queue.unsubscribe?.(queueCallback);
     });
 
-    async function wrongMessageRequest(itWrongMessageRequest: (t: MockTransport) => Promise<void>) {
+    async function wrongMessageRequest(itWrongMessageRequest: (t: MockTransport, s?: MessageStore) => Promise<number>) {
         const queue = await initializeQueue();
 
         let disconnectedResolve: ((value: Message) => void) | undefined;
@@ -556,8 +557,11 @@ describe('client', () => {
         const disconnectedPromise = new Promise(resolve => {
             disconnectedResolve = resolve;
         });
-        
-        await itWrongMessageRequest(mockTransport);
+
+        const count = await itWrongMessageRequest(mockTransport, store);
+
+        queueMessagesCount += count;
+        storedMessagesCount += count;
 
         expect(mockTransport.closedByClient).toBeTruthy();
 
@@ -566,7 +570,7 @@ describe('client', () => {
         expect(disconnectedMessage).toEqual({
             conversationId,
             participants,
-            instanceId: instanceId,
+            instanceId,
             connectionId,
             fromId: userName,
             type: 'disconnected',
@@ -574,13 +578,13 @@ describe('client', () => {
             data: null,
         });
 
-        id = '2';
+        id = (2 + count).toString();
         expect(queueMessages.length).toBeGreaterThan(queueMessagesCount);
         expect(queueMessages[queueMessagesCount++]).toEqual({
             id,
             conversationId,
             participants,
-            instanceId: instanceId,
+            instanceId,
             connectionId,
             fromId: userName,
             type: 'left',
@@ -595,7 +599,7 @@ describe('client', () => {
         expect(queueMessages[queueMessagesCount++]).toEqual({
             conversationId,
             participants,
-            instanceId: instanceId,
+            instanceId,
             connectionId,
             fromId: userName,
             type: 'disconnected',
@@ -626,27 +630,148 @@ describe('client', () => {
     }
 
     it('wrong message', async () => {
-         await wrongMessageRequest(async (t) => {
+        await wrongMessageRequest(async (t) => {
             const fileData = {
                 link: 'link',
                 name: '',
                 type: 'type',
                 size: 1
             };
-    
+
             const wrongRequest = {
                 type: 'file',
                 data: fileData,
             };
-    
+
             const data = JSON.stringify(wrongRequest);
-    
+
             const result = await t.sendToClientToClose(data);
-    
+
             expect(result).toEqual({
                 code: 1000,
                 data: 'Failed processConversationRequest. Wrong file name',
             });
+
+            return 0;
+        });
+    });
+
+    it('deleting wrong message', async () => {
+        await wrongMessageRequest(async (t, s) => {
+            const deleteMessageData = {
+                messageId: '3',
+                deletedAt: currentTime,
+            };
+
+            const data = JSON.stringify({
+                type: 'message-delete',
+                data: deleteMessageData,
+            });
+
+            const result = await t.sendToClientToClose(data);
+
+            expect(result).toEqual({
+                code: 1000,
+                data: 'Failed processConversationRequest. Wrong message',
+            });
+
+            return 0;
+        });
+    });
+
+    it('user is not allowed to delete message', async () => {
+        await wrongMessageRequest(async (t, s) => {
+            const m: StoreMessage = {
+                id: '3',
+                conversationId: '1',
+                participants: ['test', 'test2'],
+                connectionId: '1',
+                fromId: 'test2',
+                type: 'text',
+                createdAt: currentTime,
+                data: {},
+            };
+
+            s!.saveMessage(m);
+
+            const deleteMessageData = {
+                messageId: m.id,
+                deletedAt: currentTime,
+            };
+
+            const data = JSON.stringify({
+                type: 'message-delete',
+                data: deleteMessageData,
+            });
+
+            const result = await t.sendToClientToClose(data);
+
+            expect(result).toEqual({
+                code: 1000,
+                data: 'Failed processConversationRequest. User is not allowed to delete message',
+            });
+
+            m.deletedAt = deleteMessageData.deletedAt;
+            s!.saveMessage(m);
+
+            return 0;
+        });
+    });
+
+    it('failed deleting message', async () => {
+        await wrongMessageRequest(async (t, s) => {
+            const fileData = {
+                link: 'link',
+                name: 'name',
+                type: 'type',
+                size: 1
+            };
+
+            const fileRequest = {
+                type: 'file',
+                data: fileData,
+            };
+
+            let data = JSON.stringify(fileRequest);
+
+            const msg = await Promise.any(t.sendToClient(data));
+
+            let msgCount = 4;
+            expect(msg).toHaveLength(msgCount + 1);
+            expect(msg[msgCount++]).toBe(`{"type":"file","id":"2","instanceId":"1","conversationId":"1","participants":[\"test\",\"test2\"],"connectionId":"1","fromId":"test","createdAt":"${jsonCurrentTime}","data":${JSON.stringify(fileData)}}`);
+
+            const deleteMessageData = {
+                messageId: '2',
+                deletedAt: currentTime,
+            };
+
+            data = JSON.stringify({
+                type: 'message-delete',
+                data: deleteMessageData,
+            });
+
+            const saveMessage = s!.saveMessage;
+
+            s!.saveMessage = async m => {
+                m.deletedAt = undefined;
+
+                const r = saveMessage(m);
+
+                if (m.id === '2') {
+                    return { _id: '', result: 'failed' };
+                }
+
+                return r;
+            };
+
+            const result = await t.sendToClientToClose(data);
+
+            expect(result).toEqual({
+                code: 1000,
+                data: 'Failed processConversationRequest. Delete message failed',
+            });
+
+            return 1;
         });
     });
 });
