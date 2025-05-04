@@ -1,6 +1,6 @@
 {
   "name": "only-chat",
-  "version": "0.2.0-beta.17",
+  "version": "0.2.0-beta.18",
   "description": "only-chat application built on Elasticsearch storages, RabbitMQ queue and WebSocket transport",
   "main": "index.js",
   "type": "module",
@@ -17,16 +17,16 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "@only-chat/types": "0.2.0-beta.17",
+    "@only-chat/types": "0.2.0-beta.18",
     "@types/ws": "^8.5.4",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5"
   },
   "dependencies": {
-    "@only-chat/client": "0.2.0-beta.17",
-    "@only-chat/elasticsearch-store": "0.2.0-beta.17",
-    "@only-chat/elasticsearch-user-store": "0.2.0-beta.17",
-    "@only-chat/rabbitmq-queue": "0.2.0-beta.17",
+    "@only-chat/client": "0.2.0-beta.18",
+    "@only-chat/elasticsearch-store": "0.2.0-beta.18",
+    "@only-chat/elasticsearch-user-store": "0.2.0-beta.18",
+    "@only-chat/rabbitmq-queue": "0.2.0-beta.18",
     "ws": "^8.13.0"
   }
 }
