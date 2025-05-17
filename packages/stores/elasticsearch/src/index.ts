@@ -63,22 +63,6 @@ async function findMessages(r: FindRequest): Promise<FindResult> {
 
     const must: estypes.QueryDslQueryContainer[] = [];
 
-    if (r.ids?.length) {
-        must.push({
-            ids: {
-                values: r.ids,
-            }
-        });
-    }
-
-    if (r.conversationIds?.length) {
-        must.push({
-            terms: {
-                conversationId: r.conversationIds,
-            }
-        });
-    }
-
     if (r.text) {
         must.push({
             match: {
@@ -89,8 +73,31 @@ async function findMessages(r: FindRequest): Promise<FindResult> {
         });
     }
 
+    const filter: estypes.QueryDslQueryContainer[] = [{
+        bool: {
+            must_not,
+        }
+    }];
+
+    if (r.ids?.length) {
+        filter.push({
+            ids: {
+                values: r.ids,
+            }
+        });
+    }
+
+    if (r.conversationIds?.length) {
+        filter.push({
+            terms: {
+                conversationId: r.conversationIds,
+            }
+        });
+    }
+
+
     if (r.fromIds?.length) {
-        must.push({
+        filter.push({
             terms: {
                 fromId: r.fromIds,
             }
@@ -98,7 +105,7 @@ async function findMessages(r: FindRequest): Promise<FindResult> {
     }
 
     if (r.types?.length) {
-        must.push({
+        filter.push({
             terms: {
                 type: r.types,
             }
@@ -106,14 +113,12 @@ async function findMessages(r: FindRequest): Promise<FindResult> {
     }
 
     if (r.clientMessageIds?.length) {
-        must.push({
+        filter.push({
             terms: {
                 clientMessageId: r.clientMessageIds,
             }
         });
     }
-
-    const filter: estypes.QueryDslQueryContainer[] = [];
 
     if (r.createdFrom) {
         filter.push({ range: { createdAt: { gte: r.createdFrom.valueOf() } } });
@@ -126,7 +131,6 @@ async function findMessages(r: FindRequest): Promise<FindResult> {
     const query: estypes.QueryDslQueryContainer = {
         bool: {
             must,
-            must_not,
             filter,
         }
     };
@@ -136,6 +140,8 @@ async function findMessages(r: FindRequest): Promise<FindResult> {
     if (r.sort) {
         const sortOrder = r.sortDesc ? 'desc' : 'asc';
         sort.push({ [r.sort]: sortOrder });
+    } else if (!r.text) {
+        sort.push({ createdAt: 'desc' });
     }
 
     if (r.size !== 0 && !r.size || r.size < 0) {
@@ -189,18 +195,22 @@ async function getLastMessagesTimestamps(fromId: string, conversationId: string[
     const query: estypes.QueryDslQueryContainer = {
         bool:
         {
-            must_not: [{ exists: { field: 'deletedAt' } }],
-            must: [
-                { terms: { conversationId } },
+            filter: [
+                {
+                    bool: { must_not: { exists: { field: 'deletedAt' } } }
+                },
+                {
+                    terms: { conversationId }
+                },
                 {
                     bool: {
                         should: [
                             { terms: { types } },
                             { term: { fromId: { value: fromId } } },
-                        ],
+                        ]
                     },
                 },
-            ],
+            ]
         }
     }
 
@@ -239,8 +249,14 @@ async function getLastMessagesTimestamps(fromId: string, conversationId: string[
         size: conversationId.length * 10,
         query: {
             bool: {
-                must_not: [{ exists: { field: 'deletedAt' } }],
-                should,
+                filter: [
+                    {
+                        bool: {
+                            must_not: [{ exists: { field: 'deletedAt' } }],
+                            should,
+                        },
+                    }
+                ]
             },
         },
     });
@@ -274,16 +290,23 @@ async function getLastMessagesTimestamps(fromId: string, conversationId: string[
 }
 
 async function getParticipantConversationById(participant: string | undefined, id: string): Promise<Conversation | undefined> {
-    const must: estypes.QueryDslQueryContainer[] = [
+    const filter: estypes.QueryDslQueryContainer[] = [
         {
-            ids: {
-                values: [id],
+            bool: {
+                must_not: {
+                    exists: {
+                        field: 'deletedAt'
+                    }
+                }
             }
-        }
+        },
+        {
+            ids: { values: [id] }
+        },
     ];
 
     if (participant) {
-        must.push({
+        filter.push({
             term: {
                 participants: {
                     value: participant,
@@ -295,16 +318,7 @@ async function getParticipantConversationById(participant: string | undefined, i
     const result: estypes.SearchResponseBody<Conversation> = await client.search({
         index: conversationsIndex,
         size: 1,
-        query: {
-            bool: {
-                must,
-                must_not: {
-                    exists: {
-                        field: 'deletedAt'
-                    }
-                },
-            }
-        }
+        query: { bool: { filter } },
     });
 
     const h = result.hits.hits[0];
@@ -315,7 +329,7 @@ async function getParticipantConversationById(participant: string | undefined, i
 async function getParticipantConversations(participant: string, ids: string[] | undefined, excludeIds: string[] = [], from: number = 0, size: number = 100): Promise<ConversationsResult> {
     let comversationIds: string[] = [];
 
-    const must: estypes.QueryDslQueryContainer[] = [{
+    const filter: estypes.QueryDslQueryContainer[] = [{
         term: {
             participants: {
                 value: participant,
@@ -324,13 +338,15 @@ async function getParticipantConversations(participant: string, ids: string[] | 
     }];
 
     if (ids) {
-        must.push({ terms: { conversationId: ids } });
+        filter.push({ terms: { conversationId: ids } });
     }
 
-    const must_not: estypes.QueryDslQueryContainer[] = []
-
     if (excludeIds) {
-        must_not.push({ terms: { conversationId: excludeIds } });
+        filter.push({
+            bool: {
+                must_not: { terms: { conversationId: excludeIds } },
+            },
+        });
     }
 
     if (size > 0) {
@@ -338,10 +354,7 @@ async function getParticipantConversations(participant: string, ids: string[] | 
             index: messagesIndex,
             size: 0,
             query: {
-                bool: {
-                    must,
-                    must_not,
-                },
+                bool: { filter },
             },
             aggs: {
                 conversation_id_agg: {
@@ -366,24 +379,31 @@ async function getParticipantConversations(participant: string, ids: string[] | 
 
     const query = {
         bool: {
-            must: {
-                term: {
-                    participants: {
-                        value: participant,
-                    }
-                },
-            },
-            must_not: [
+            filter: [
                 {
-                    ids: {
-                        values: excludeIds,
-                    }
+                    term: {
+                        participants: {
+                            value: participant,
+                        }
+                    },
                 },
                 {
-                    exists: {
-                        field: 'deletedAt'
-                    }
-                }],
+                    bool: {
+                        must_not: [
+                            {
+                                ids: {
+                                    values: excludeIds,
+                                }
+                            },
+                            {
+                                exists: {
+                                    field: 'deletedAt'
+                                }
+                            },
+                        ]
+                    },
+                },
+            ]
         }
     }
 
@@ -437,7 +457,7 @@ async function getParticipantLastMessage(participant: string, conversationId: st
         query: {
             bool: {
                 // must_not: [{ exists: { field: 'deletedAt' } }],
-                must: [
+                filter: [
                     { term: { fromId: { value: participant } } },
                     { term: { conversationId: { value: conversationId } } },
                 ],
@@ -458,16 +478,22 @@ async function getPeerToPeerConversationId(peer1: string, peer2: string): Promis
         size: 1,
         query: {
             bool: {
-                must: {
-                    ids: {
-                        values: [id],
-                    }
-                },
-                must_not: {
-                    exists: {
-                        field: 'deletedAt'
-                    }
-                },
+                filter: [
+                    {
+                        ids: {
+                            values: [id],
+                        }
+                    },
+                    {
+                        bool: {
+                            must_not: {
+                                exists: {
+                                    field: 'deletedAt'
+                                }
+                            },
+                        },
+                    },
+                ]
             }
         }
     };

@@ -40,15 +40,19 @@ export async function initialize(config: Config): Promise<UserStore> {
             size: 1,
             query: {
                 bool: {
-                    must: [
+                    filter: [
                         { ids: { values: [name] } },
                         { term: { password: { value: password } } },
-                    ],
-                    must_not: {
-                        exists: {
-                            field: 'deletedAt'
-                        }
-                    },
+                        {
+                            bool: {
+                                must_not: {
+                                    exists: {
+                                        field: 'deletedAt'
+                                    }
+                                }
+                            }
+                        },
+                    ]
                 }
             }
         });
