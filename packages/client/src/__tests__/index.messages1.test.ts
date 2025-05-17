@@ -774,4 +774,49 @@ describe('client', () => {
             return 1;
         });
     });
+
+    it('failed sending message to closed conversation', async () => {
+        await wrongMessageRequest(async (t, s) => {
+            const closeConversationRequest = {
+                type: 'close',
+                data: {
+                    conversationId: '1',
+                }
+            };
+
+            let data = JSON.stringify(closeConversationRequest);
+
+            const msg = await Promise.any(t.sendToClient(data));
+
+            const closedConversationData = { ...closeConversationRequest.data, closedAt: currentTime };
+
+            let msgCount = 4;
+            expect(msg).toHaveLength(msgCount + 1);
+
+            expect(msg[msgCount++]).toBe(`{"type":"closed","data":${JSON.stringify(closedConversationData)}}`);
+
+            const fileData = {
+                link: 'link',
+                name: 'name',
+                type: 'type',
+                size: 1
+            };
+
+            const fileRequest = {
+                type: 'file',
+                data: fileData,
+            };
+
+            data = JSON.stringify(fileRequest);
+
+            const result = await t.sendToClientToClose(data);
+
+            expect(result).toEqual({
+                code: 1000,
+                data: 'Failed processConversationRequest. Conversation closed',
+            });
+
+            return 1;
+        });
+    });
 });
