@@ -159,8 +159,9 @@ async function getParticipantConversationById(participant: string | undefined, i
 async function getParticipantConversations(participant: string, ids: string[] | undefined, excludeIds: string[] = [], from: number = 0, size: number = 100): Promise<ConversationsResult> {
     const result: Conversation[] = [];
 
-    const filteredConversations = Array.from(conversations.values(), v => v.conversation).filter(c => (ids ? ids.includes(c.id!) : true) && !excludeIds.includes(c.id!));
-    const sortedConversations = filteredConversations.sort((a, b) => {
+    const participantConversations = Array.from(conversations.values(), v => v.conversation).filter(c => (ids ? ids.includes(c.id!) : true) && !excludeIds.includes(c.id!));
+
+    participantConversations.sort((a, b) => {
         if (a.createdAt == b.createdAt) {
             return a.id! < b.id! ? 1 : -1;
         }
@@ -171,7 +172,7 @@ async function getParticipantConversations(participant: string, ids: string[] | 
     let start = from;
     let total = 0;
 
-    for (const c of sortedConversations) {
+    for (const c of participantConversations) {
         if (!c.deletedAt) {
             if (c.participants.includes(participant)) {
                 ++total;
