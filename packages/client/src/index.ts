@@ -847,11 +847,6 @@ export class WsClient {
             return null;
         }
 
-        if (conversation.deletedAt) {
-            this.lastError = 'Conversation already deleted';
-            return null;
-        }
-
         let type: QueueMessageType = 'updated';
 
         if (this.id === conversation.createdBy) {
@@ -866,13 +861,8 @@ export class WsClient {
             }
         } else if (del) {
             //leave conversation
-            const count = conversation.participants.length;
             conversation.participants = conversation.participants.filter(p => p !== this.id);
-            if (count === conversation.participants.length) {
-                this.lastError = 'User is not allowed to delete conversation';
-                return null;
-            }
-
+            conversation.updatedAt = data.deletedAt;
             data.participants = conversation.participants;
         } else {
             this.lastError = 'User is not allowed to close conversation';
@@ -912,12 +902,19 @@ export class WsClient {
                     };
 
                     const del = request.type === 'delete';
+
                     if (del) {
                         data.deletedAt = now;
                     }
 
                     const type: QueueMessageType | null = await this.closeDeleteConversation(data, del);
+
                     if (type) {
+                        if (type === "updated") {
+                            delete data.closedAt;
+                            delete data.deletedAt;
+                            data.updatedAt = now;
+                        }
 
                         this.send({ type, clientMessageId, data });
 
