@@ -1,5 +1,5 @@
 import { jest, describe, expect, it } from '@jest/globals';
-import { initialize as initializeClient, WsClient, WsClientState } from '../index.js';
+import { initialize as initializeClient, TransportState, WsClient, WsClientState } from '../index.js';
 import { initialize as initializeStore, saveInstance } from '@only-chat/in-memory-store';
 import { initialize as initializeQueue } from '@only-chat/in-memory-queue';
 import { initialize as initializeUserStore } from '@only-chat/in-memory-user-store';
@@ -7,6 +7,7 @@ import { MockTransport } from '../mocks/mockTransport.js';
 
 import type { Log } from '@only-chat/types/log.js';
 import type { Message } from '@only-chat/types/queue.js';
+import type { Conversation, MessageStore } from '@only-chat/types/store.js';
 
 const logger: Log | undefined = undefined;
 
@@ -124,7 +125,7 @@ describe('client', () => {
         expect(client.state).toBe(WsClientState.Connected);
         expect(msg).toHaveLength(msgCount);
 
-        const loadedConversationsData = { type:'loaded', conversations: [{ ...conversation2, connected: [] }, { ...conversation1, connected: [] }], count: 2 };
+        const loadedConversationsData = { type: 'loaded', conversations: [{ ...conversation2, connected: [] }, { ...conversation1, connected: [] }], count: 2 };
 
         expect(msg[msgCount - 1]).toBe(JSON.stringify(loadedConversationsData));
 
@@ -201,8 +202,9 @@ describe('client', () => {
 
         let deletedConversationData = {
             ...deleteConversationRequest.data,
-            closedAt: currentTime,
-            deletedAt: currentTime,
+            closedAt: currentTime as Date | undefined,
+            deletedAt: currentTime as Date | undefined,
+            updatedAt: undefined as Date | undefined,
             participants: undefined as string[] | undefined
         };
 
@@ -247,7 +249,7 @@ describe('client', () => {
 
         expect(msg).toHaveLength(msgCount);
 
-        deletedConversationData = { ...deleteConversationRequest.data, closedAt: currentTime, deletedAt: currentTime, participants: ['1', '2'] };
+        deletedConversationData = { ...deleteConversationRequest.data, participants: ['1', '2'], closedAt: undefined, deletedAt: undefined, updatedAt: currentTime };
 
         expect(msg[msgCount - 1]).toBe(`{"type":"updated","data":${JSON.stringify(deletedConversationData)}}`);
         expect(queueMessages).toHaveLength(queueMessagesCount + 1);
@@ -306,7 +308,7 @@ describe('client', () => {
         queue.unsubscribe?.(queueCallback);
     });
 
-    it('failed delete conversation workflow', async () => {
+    async function wrongConversationRequest(conversation: Conversation, itWrongConversationRequest: (t: MockTransport, s: MessageStore) => Promise<void>) {
         const queue = await initializeQueue();
 
         let disconnectedResolve: ((value: Message) => void) | undefined;
@@ -325,16 +327,11 @@ describe('client', () => {
 
         const store = await initializeStore();
 
-        const conversation4 = {
-            id: '4',
-            participants: ['1', '2', '3'],
-            createdBy: '2',
-            createdAt: new Date('2024-01-03')
-        };
+        const userName = 'test';
 
-        let result3 = await store.saveConversation(conversation4);
-        expect(result3._id).toBe(conversation4.id);
-        expect(result3.result).toBe('created');
+        let result = await store.saveConversation(conversation);
+        expect(result._id).toBe(conversation.id);
+        expect(result.result).toBe('created');
 
         const userStore = await initializeUserStore();
 
@@ -355,7 +352,6 @@ describe('client', () => {
         expect(WsClient.conversations.size).toBe(0);
 
         const connectionId = '1';
-        const userName = 'test';
 
         let data = JSON.stringify({ authInfo: { name: userName, password: 'test' }, conversationsSize: 100 });
 
@@ -366,7 +362,12 @@ describe('client', () => {
         expect(client.state).toBe(WsClientState.Connected);
         expect(msg).toHaveLength(msgCount + 1);
         expect(msg[msgCount - 1]).toBe(`{"type":"hello","instanceId":"${instanceId}"}`);
-        expect(msg[msgCount++]).toBe(`{"type":"connection","connectionId":"1","id":"${userName}","conversations":{"conversations":[],"from":0,"size":100,"total":0}}`);
+        if (conversation.participants.includes(userName)) {
+            expect(msg[msgCount++]).toBe(`{"type":"connection","connectionId":"1","id":"${userName}","conversations":{"conversations":[${JSON.stringify(conversation)}],"from":0,"size":100,"total":1}}`);
+        } else {
+            expect(msg[msgCount++]).toBe(`{"type":"connection","connectionId":"1","id":"${userName}","conversations":{"conversations":[],"from":0,"size":100,"total":0}}`);
+        }
+
         expect(queueMessages).toHaveLength(queueMessagesCount + 1);
         expect(queueMessages[queueMessagesCount++]).toEqual({
             instanceId: instanceId,
@@ -380,22 +381,14 @@ describe('client', () => {
         expect(WsClient.connectedClients.size).toBe(1);
         expect(WsClient.connectedClients.has(userName)).toBeTruthy();
 
-        const deleteConversationRequest = {
-            type: 'delete',
-            data: {
-                conversationId: result3._id,
-            }
-        };
+        await itWrongConversationRequest(mockTransport, store);
 
-        data = JSON.stringify(deleteConversationRequest);
-
-        const result = await mockTransport.sendToClientToClose(data);
-
-        expect(result.data).toEqual('Failed processRequest. Conversation not found');
         expect(mockTransport.closedByClient).toBeTruthy();
+        expect(mockTransport.readyState).toBe(TransportState.CLOSED);
+
         expect(client.state).toBe(WsClientState.Disconnected);
-        expect(queueMessages).toHaveLength(queueMessagesCount + 1);
-        expect(queueMessages[queueMessagesCount]).toEqual({
+
+        expect(queueMessages[queueMessages.length - 1]).toEqual({
             instanceId: instanceId,
             connectionId,
             fromId: userName,
@@ -409,5 +402,209 @@ describe('client', () => {
         expect(WsClient.conversations.size).toBe(0);
 
         queue.unsubscribe?.(queueCallback);
+    }
+
+    it('failed deleting conversation workflow', async () => {
+        const conversation = {
+            id: '4',
+            participants: ['1', '2', '3'],
+            createdBy: '2',
+            createdAt: new Date('2024-01-03')
+        };
+
+        await wrongConversationRequest(conversation, async (t) => {
+
+            const conversationId = conversation.id;
+
+            const deleteConversationRequest = {
+                type: 'delete',
+                data: { conversationId }
+            };
+
+            const data = JSON.stringify(deleteConversationRequest);
+
+            const result = await t.sendToClientToClose(data);
+
+            expect(result.data).toEqual('Failed processRequest. Conversation not found');
+        });
+    });
+
+    it('failed deleting conversation workflow (null id)', async () => {
+        const conversation = {
+            id: '4',
+            participants: ['1', '2', '3'],
+            createdBy: '2',
+            createdAt: new Date('2024-01-03')
+        };
+
+        await wrongConversationRequest(conversation, async (t) => {
+
+            const conversationId = null;
+
+            const deleteConversationRequest = {
+                type: 'delete',
+                data: { conversationId }
+            };
+
+            const data = JSON.stringify(deleteConversationRequest);
+
+            const result = await t.sendToClientToClose(data);
+
+            expect(result.data).toEqual('Failed processRequest. Wrong conversation identifier');
+        });
+    });
+
+    it('leaving after deleting conversation workflow (non creator)', async () => {
+        const userName = 'test';
+
+        const participants = ['1', '2', '3'];
+
+        const conversation = {
+            id: '1',
+            participants: [userName, ...participants],
+            createdBy: '1',
+            createdAt: new Date('2024-01-03'),
+            connected: [],
+        };
+
+        await wrongConversationRequest(conversation, async (t, s) => {
+
+            const conversationId = conversation.id;
+
+            const deleteConversationRequest = {
+                type: 'delete',
+                data: { conversationId }
+            };
+
+            const data = JSON.stringify(deleteConversationRequest);
+
+            const msg = await Promise.any(t.sendToClient(data));
+
+            expect(msg).toHaveLength(3);
+
+            expect(msg[2]).toBe(`{"type":"updated","data":{"conversationId":"${conversationId}","participants":${JSON.stringify(participants)},"updatedAt":"${currentTime.toJSON()}"}}`);
+
+            const closeData = await t.closeToClient('stop test');
+
+            expect(closeData).toEqual({
+                code: 1000,
+                data: 'Stopped',
+            });
+
+            const storedMessages = await s.findMessages({});
+            expect(storedMessages.total).toEqual(1);
+            expect(storedMessages.messages).toHaveLength(1);
+            expect(storedMessages.messages[storedMessages.messages.length - 1]).toEqual({
+                id: '1',
+                connectionId: '1',
+                fromId: userName,
+                type: 'updated',
+                createdAt: currentTime,
+                data: {
+                    conversationId,
+                    participants,
+                    updatedAt: currentTime,
+                },
+            });
+        });
+    });
+
+    it('failed closing conversation workflow', async () => {
+        const userName = 'test';
+
+        const conversation = {
+            id: '1',
+            participants: [userName, '1', '2', '3'],
+            createdBy: userName,
+            createdAt: new Date('2024-01-03'),
+            connected: [],
+        };
+
+        await wrongConversationRequest(conversation, async (t, s) => {
+
+            const conversationId = conversation.id;
+
+            const closeConversationRequest = {
+                type: 'close',
+                data: { conversationId }
+            };
+
+            const saveConversation = s.saveConversation;
+
+            s.saveConversation = async c => {
+                c.updatedAt = undefined;
+
+                const r = saveConversation(c);
+
+                if (c.id === conversationId) {
+                    return { _id: '', result: 'failed' };
+                }
+
+                return r;
+            };
+
+            const data = JSON.stringify(closeConversationRequest);
+
+            const result = await t.sendToClientToClose(data);
+
+            expect(result.data).toEqual('Failed processRequest. Close conversation failed');
+        });
+    });
+
+    it('failed closing conversation workflow (already closed)', async () => {
+        const userName = 'test';
+
+        const conversation = {
+            id: '1',
+            participants: [userName, '1', '2', '3'],
+            createdBy: '1',
+            createdAt: new Date('2024-01-03'),
+            closedAt: new Date('2024-01-04'),
+            connected: [],
+        };
+
+        await wrongConversationRequest(conversation, async (t) => {
+
+            const conversationId = conversation.id;
+
+            const closeConversationRequest = {
+                type: 'close',
+                data: { conversationId }
+            };
+
+            const data = JSON.stringify(closeConversationRequest);
+
+            const result = await t.sendToClientToClose(data);
+
+            expect(result.data).toEqual('Failed processRequest. Conversation already closed');
+        });
+    });
+
+    it('failed closing conversation workflow (no rights)', async () => {
+        const userName = 'test';
+
+        const conversation = {
+            id: '1',
+            participants: [userName, '1', '2', '3'],
+            createdBy: '1',
+            createdAt: new Date('2024-01-03'),
+            connected: [],
+        };
+
+        await wrongConversationRequest(conversation, async (t) => {
+
+            const conversationId = conversation.id;
+
+            const closeConversationRequest = {
+                type: 'close',
+                data: { conversationId }
+            };
+
+            const data = JSON.stringify(closeConversationRequest);
+
+            const result = await t.sendToClientToClose(data);
+
+            expect(result.data).toEqual('Failed processRequest. User is not allowed to close conversation');
+        });
     });
 });

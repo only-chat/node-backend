@@ -99,7 +99,7 @@ describe('client', () => {
 
         const connectionId = '1';
 
-        expect(msg[msgCount++]).toBe(`{"type":"watching","conversations":{"conversations":[${JSON.stringify({ ...conversation1, connected: [] })}],"from":0,"size":0,"total":1}}`);
+        expect(msg[msgCount++]).toBe(`{"type":"watching","conversations":{"conversations":[],"from":0,"size":0,"total":1}}`);
 
         expect(WsClient.joinedParticipants.size).toBe(0);
         expect(WsClient.watchers.size).toBe(1);
