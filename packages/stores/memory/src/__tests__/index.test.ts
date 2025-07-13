@@ -197,29 +197,36 @@ describe('findMessages', () => {
             conversations: [conversation3, conversation4],
         });
 
-        console.log('result2', result2);
-
-        const result3 = await store.getParticipantConversations('user3');
+        const result3 = await store.getParticipantConversations('user2', undefined, undefined, 0, 0);
 
         expect(result3).toEqual({
+            from: 0,
+            size: 0,
+            total: 4,
+            conversations: [],
+        });
+
+        const result4 = await store.getParticipantConversations('user3');
+
+        expect(result4).toEqual({
             from: 0,
             size: 100,
             total: 1,
             conversations: [conversation3],
         });
 
-        const result4 = await store.getParticipantConversations('user3', undefined, undefined, 1);
+        const result5 = await store.getParticipantConversations('user3', undefined, undefined, 1);
 
-        expect(result4).toEqual({
+        expect(result5).toEqual({
             from: 1,
             size: 100,
             total: 1,
             conversations: [],
         });
 
-        const result5 = await store.getParticipantConversations('user4');
+        const result6 = await store.getParticipantConversations('user4');
 
-        expect(result5).toEqual({
+        expect(result6).toEqual({
             from: 0,
             size: 100,
             total: 0,

@@ -7,6 +7,7 @@ import { MockTransport } from '../mocks/mockTransport.js';
 
 import type { Log } from '@only-chat/types/log.js';
 import type { Message } from '@only-chat/types/queue.js';
+import { MessageUpdate } from '@only-chat/types/store.js';
 
 const logger: Log | undefined = undefined;
 
@@ -192,7 +193,7 @@ describe('client', () => {
             data: textData,
         });
 
-        const updateMessageData = {
+        let updateMessageData : MessageUpdate = {
             messageId: id,
             type: 'text',
             text: 'text2',
@@ -249,9 +250,9 @@ describe('client', () => {
             data: { text: 'text2' },
             updatedAt: currentTime,
         });
-
+        
         let newParticipants = [userName, ' test3 '];
-        const updateConversationData = {
+        let updateConversationData = {
             title: 'new title',
             participants: newParticipants,
             updatedAt: currentTime,
@@ -300,6 +301,99 @@ describe('client', () => {
             data: updateConversationData,
         });
 
+        const fileData = {
+            link: 'link',
+            name: 'name',
+            type: 'type',
+            size: 1
+        };
+
+        data = JSON.stringify({
+            type: 'file',
+            data: fileData,
+        });
+
+        id = '5';
+
+        msg = await Promise.any(mockTransport.sendToClient(data));
+        expect(msg).toHaveLength(msgCount + 1);
+        expect(msg[msgCount++]).toBe(`{"type":"file","id":"${id}","instanceId":"${instanceId}","conversationId":"${conversationId}","participants":${JSON.stringify(newParticipants)},"connectionId":"${connectionId}","fromId":"${userName}","createdAt":"${jsonCurrentTime}","data":${JSON.stringify(fileData)}}`);
+
+        expect(queueMessages).toHaveLength(queueMessagesCount + 1);
+        expect(queueMessages[queueMessagesCount++]).toEqual({
+            id,
+            conversationId,
+            participants: newParticipants,
+            instanceId: instanceId,
+            connectionId,
+            fromId: userName,
+            type: 'file',
+            createdAt: currentTime,
+            data: fileData,
+        });
+
+        storedMessages = await store.findMessages({});
+        expect(storedMessages.total).toEqual(storedMessagesCount + 1);
+        expect(storedMessages.messages).toHaveLength(storedMessagesCount + 1);
+        expect(storedMessages.messages[storedMessagesCount++]).toEqual({
+            id,
+            conversationId,
+            participants: newParticipants,
+            connectionId,
+            fromId: userName,
+            type: 'file',
+            createdAt: currentTime,
+            data: fileData,
+        });
+
+        updateMessageData = {
+            messageId: id,
+            type: 'file2',
+            link: 'link2',
+            name: 'name2',
+            size: 2,
+            updatedAt: currentTime,
+        };
+
+        data = JSON.stringify({
+            type: 'message-update',
+            data: updateMessageData,
+        });
+
+        id = '6';
+
+        msg = await Promise.any(mockTransport.sendToClient(data));
+
+        expect(msg).toHaveLength(msgCount + 1);
+        expect(msg[msgCount++]).toBe(`{"type":"message-updated","id":"${id}","instanceId":"${instanceId}","conversationId":"${conversationId}","participants":${JSON.stringify(newParticipants)},"connectionId":"${connectionId}","fromId":"${userName}","createdAt":"${jsonCurrentTime}","data":${JSON.stringify(updateMessageData)}}`);
+
+        expect(queueMessages).toHaveLength(queueMessagesCount + 1);
+        expect(queueMessages[queueMessagesCount++]).toEqual({
+            id,
+            conversationId,
+            participants: newParticipants,
+            instanceId: instanceId,
+            connectionId,
+            fromId: userName,
+            type: 'message-updated',
+            createdAt: currentTime,
+            data: updateMessageData,
+        });
+
+        storedMessages = await store.findMessages({});
+        expect(storedMessages.total).toEqual(storedMessagesCount + 1);
+        expect(storedMessages.messages).toHaveLength(storedMessagesCount + 1);
+        expect(storedMessages.messages[storedMessagesCount++]).toEqual({
+            id,
+            conversationId,
+            participants: newParticipants,
+            connectionId,
+            fromId: userName,
+            type: 'message-updated',
+            createdAt: currentTime,
+            data: updateMessageData,
+        });
+
         const deleteMessageData = {
             messageId: '2',
             deletedAt: currentTime,
@@ -310,7 +404,7 @@ describe('client', () => {
             data: deleteMessageData,
         });
 
-        id = '5';
+        id = '7';
 
         msg = await Promise.any(mockTransport.sendToClient(data));
 
@@ -376,7 +470,8 @@ describe('client', () => {
 
         expect(queueMessages).toHaveLength(queueMessagesCount + 2);
 
-        id = '6';
+        id = '8';
+        
         expect(queueMessages[queueMessagesCount++]).toEqual({
             id,
             conversationId,
@@ -389,7 +484,7 @@ describe('client', () => {
             data: null,
         });
 
-        expect(queueMessages[7]).toEqual({
+        expect(queueMessages[queueMessagesCount++]).toEqual({
             conversationId,
             participants: newParticipants,
             instanceId: instanceId,

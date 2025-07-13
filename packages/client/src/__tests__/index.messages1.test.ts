@@ -775,7 +775,7 @@ describe('client', () => {
         });
     });
 
-    it('failed sending message to closed conversation', async () => {
+    it('failed sending text message to closed conversation', async () => {
         await wrongMessageRequest(async (t, s) => {
             const closeConversationRequest = {
                 type: 'close',
@@ -791,6 +791,50 @@ describe('client', () => {
             const closedConversationData = { ...closeConversationRequest.data, closedAt: currentTime };
 
             let msgCount = 4;
+
+            expect(msg).toHaveLength(msgCount + 1);
+
+            expect(msg[msgCount++]).toBe(`{"type":"closed","data":${JSON.stringify(closedConversationData)}}`);
+
+            const textData = {
+                text: 'text',
+            };
+
+            const textRequest = {
+                type: 'text',
+                data: textData,
+            };
+
+            data = JSON.stringify(textRequest);
+
+            const result = await t.sendToClientToClose(data);
+
+            expect(result).toEqual({
+                code: 1000,
+                data: 'Failed processConversationRequest. Conversation closed',
+            });
+
+            return 1;
+        });
+    });
+
+    it('failed sending file message to closed conversation', async () => {
+        await wrongMessageRequest(async (t, s) => {
+            const closeConversationRequest = {
+                type: 'close',
+                data: {
+                    conversationId: '1',
+                }
+            };
+
+            let data = JSON.stringify(closeConversationRequest);
+
+            const msg = await Promise.any(t.sendToClient(data));
+
+            const closedConversationData = { ...closeConversationRequest.data, closedAt: currentTime };
+
+            let msgCount = 4;
+
             expect(msg).toHaveLength(msgCount + 1);
 
             expect(msg[msgCount++]).toBe(`{"type":"closed","data":${JSON.stringify(closedConversationData)}}`);

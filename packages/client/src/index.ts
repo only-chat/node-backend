@@ -967,6 +967,7 @@ export class WsClient {
                 this.lastError = 'Conversation closed';
                 return false;
             }
+            
             return true;
         }
 

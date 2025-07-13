@@ -607,4 +607,76 @@ describe('client', () => {
             expect(result.data).toEqual('Failed processRequest. User is not allowed to close conversation');
         });
     });
+
+    it('failed updating conversation workflow', async () => {
+        const userName = 'test';
+
+        const conversation = {
+            id: '1',
+            participants: [userName, '1', '2', '3'],
+            createdBy: userName,
+            createdAt: new Date('2024-01-03'),
+            connected: [],
+        };
+
+        await wrongConversationRequest(conversation, async (t, s) => {
+
+            const conversationId = conversation.id;
+
+            const saveConversation = s.saveConversation;
+
+            s.saveConversation = async c => {
+                c.updatedAt = undefined;
+
+                const r = saveConversation(c);
+
+                if (c.id === conversationId) {
+                    return { _id: '', result: 'failed' };
+                }
+
+                return r;
+            };
+
+            const data = JSON.stringify({
+                type: 'update',
+                data: {
+                    conversationId, 
+                    title: 'new title',
+                    updatedAt: currentTime,
+                },
+            });
+
+            const result = await t.sendToClientToClose(data);
+
+            expect(result.data).toEqual('Failed processRequest. Update conversation failed');
+        });
+    });
+
+    it('failed updating conversation workflow (non creator)', async () => {
+        const userName = 'test';
+
+        const conversation = {
+            id: '1',
+            participants: [userName, '1', '2', '3'],
+            createdBy: '1',
+            createdAt: new Date('2024-01-03'),
+            connected: [],
+        };
+
+        await wrongConversationRequest(conversation, async (t, s) => {
+
+            const data = JSON.stringify({
+                type: 'update',
+                data: {
+                    conversationId: conversation.id, 
+                    title: 'new title',
+                    updatedAt: currentTime,
+                },
+            });
+
+            const result = await t.sendToClientToClose(data);
+
+            expect(result.data).toEqual('Failed processRequest. User is not allowed to update conversation');
+        });
+    });
 });
