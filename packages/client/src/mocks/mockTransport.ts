@@ -58,7 +58,7 @@ export class MockTransport implements Transport {
         return p;
     }
 
-    sendToClientToClose(data: string): Promise<{ code?: number, data?: string | Buffer }> {
+    sendToClientToClose(data: string | Buffer): Promise<{ code?: number, data?: string | Buffer }> {
         if (this.closedByClient || this.readyState !== TransportState.OPEN) {
             throw new Error('Method not implemented.');
         }
@@ -69,7 +69,9 @@ export class MockTransport implements Transport {
         });
 
         try {
-            this.messageListeners.forEach(l => l(Buffer.from(data), false));
+            const isString = typeof data === 'string' || data instanceof String;
+            const buffer = isString ? Buffer.from(data) : data;
+            this.messageListeners.forEach(l => l(buffer, !isString));
         } catch (e) {
             if (this.closeReject) {
                 this.closeReject(e);

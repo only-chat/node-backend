@@ -308,7 +308,7 @@ describe('client', () => {
         queue.unsubscribe?.(queueCallback);
     });
 
-    async function wrongConversationRequest(conversation: Conversation, itWrongConversationRequest: (t: MockTransport, s: MessageStore) => Promise<void>) {
+    async function wrongConversationRequest(conversation: Conversation | null, itWrongConversationRequest: (t: MockTransport, s: MessageStore) => Promise<void>) {
         const queue = await initializeQueue();
 
         let disconnectedResolve: ((value: Message) => void) | undefined;
@@ -329,9 +329,11 @@ describe('client', () => {
 
         const userName = 'test';
 
-        let result = await store.saveConversation(conversation);
-        expect(result._id).toBe(conversation.id);
-        expect(result.result).toBe('created');
+        if (conversation) {
+            const result = await store.saveConversation(conversation);
+            expect(result._id).toBe(conversation.id);
+            expect(result.result).toBe('created');
+        }
 
         const userStore = await initializeUserStore();
 
@@ -362,7 +364,7 @@ describe('client', () => {
         expect(client.state).toBe(WsClientState.Connected);
         expect(msg).toHaveLength(msgCount + 1);
         expect(msg[msgCount - 1]).toBe(`{"type":"hello","instanceId":"${instanceId}"}`);
-        if (conversation.participants.includes(userName)) {
+        if (conversation?.participants.includes(userName)) {
             expect(msg[msgCount++]).toBe(`{"type":"connection","connectionId":"1","id":"${userName}","conversations":{"conversations":[${JSON.stringify(conversation)}],"from":0,"size":100,"total":1}}`);
         } else {
             expect(msg[msgCount++]).toBe(`{"type":"connection","connectionId":"1","id":"${userName}","conversations":{"conversations":[],"from":0,"size":100,"total":0}}`);
@@ -404,21 +406,42 @@ describe('client', () => {
         queue.unsubscribe?.(queueCallback);
     }
 
-    it('failed deleting conversation workflow', async () => {
+    it('failed processRequest with an exception', async () => {
+        const userName = 'test';
+
         const conversation = {
-            id: '4',
-            participants: ['1', '2', '3'],
-            createdBy: '2',
-            createdAt: new Date('2024-01-03')
+            id: '1',
+            participants: [userName, '1', '2', '3'],
+            createdBy: userName,
+            createdAt: new Date('2024-01-03'),
+            connected: [],
         };
 
-        await wrongConversationRequest(conversation, async (t) => {
-
+        await wrongConversationRequest(conversation, async (t, s) => {
             const conversationId = conversation.id;
 
             const deleteConversationRequest = {
                 type: 'delete',
                 data: { conversationId }
+            };
+
+            const data = JSON.stringify(deleteConversationRequest);
+
+            s.saveConversation = async () => {
+                throw new Error('Test exception');
+            };
+
+            const result = await t.sendToClientToClose(data);
+
+            expect(result.data).toEqual('Failed processRequest. Test exception');
+        });
+    });
+
+    it('failed deleting conversation workflow', async () => {
+        await wrongConversationRequest(null, async (t) => {
+            const deleteConversationRequest = {
+                type: 'delete',
+                data: { conversationId: '4' }
             };
 
             const data = JSON.stringify(deleteConversationRequest);
@@ -430,20 +453,10 @@ describe('client', () => {
     });
 
     it('failed deleting conversation workflow (null id)', async () => {
-        const conversation = {
-            id: '4',
-            participants: ['1', '2', '3'],
-            createdBy: '2',
-            createdAt: new Date('2024-01-03')
-        };
-
-        await wrongConversationRequest(conversation, async (t) => {
-
-            const conversationId = null;
-
+        await wrongConversationRequest(null, async (t) => {
             const deleteConversationRequest = {
                 type: 'delete',
-                data: { conversationId }
+                data: { conversationId: null }
             };
 
             const data = JSON.stringify(deleteConversationRequest);
@@ -640,7 +653,7 @@ describe('client', () => {
             const data = JSON.stringify({
                 type: 'update',
                 data: {
-                    conversationId, 
+                    conversationId,
                     title: 'new title',
                     updatedAt: currentTime,
                 },
@@ -668,7 +681,7 @@ describe('client', () => {
             const data = JSON.stringify({
                 type: 'update',
                 data: {
-                    conversationId: conversation.id, 
+                    conversationId: conversation.id,
                     title: 'new title',
                     updatedAt: currentTime,
                 },

@@ -1,9 +1,10 @@
 import { jest, describe, expect, it } from '@jest/globals';
-import { initialize as initializeClient, WsClient, WsClientState } from '../index.js';
+import { initialize as initializeClient, TransportState, WsClient, WsClientState } from '../index.js';
 import { initialize as initializeStore, saveInstance } from '@only-chat/in-memory-store';
 import { initialize as initializeQueue } from '@only-chat/in-memory-queue';
 import { MockTransport } from '../mocks/mockTransport.js';
 
+import type { Message } from '@only-chat/types/queue.js';
 import type { StoreAuthenticationInfo } from '@only-chat/in-memory-user-store';
 
 const currentTime = new Date('2024-08-01T00:00:00.000Z');
@@ -102,5 +103,117 @@ describe('client', () => {
                 data: 'Failed connect',
             });
         });
+    });
+
+    it('failed session', async () => {
+        const queue = await initializeQueue();
+
+        let disconnectedResolve: ((value: Message) => void) | undefined;
+
+        let queueMessagesCount = 0;
+        const queueMessages: Message[] = [];
+        async function queueCallback(msg: Message) {
+            queueMessages.push(msg);
+
+            if (disconnectedResolve && 'disconnected' === msg.type) {
+                disconnectedResolve(msg);
+            }
+        }
+
+        queue.subscribe(queueCallback);
+
+        const store = await initializeStore();
+
+        const userName = 'test';
+
+        const userStore = {
+            async authenticate(a: StoreAuthenticationInfo) {
+                if (a.name !== 'test') {
+                    throw Error();
+                }
+
+                return a.name;
+            }
+        };
+
+        const response = await saveInstance();
+
+        const instanceId = response._id;
+
+        initializeClient({ queue, store, userStore, instanceId });
+
+        const mockTransport = new MockTransport();
+
+        const client = new WsClient(mockTransport);
+
+        expect(client.state).toBe(WsClientState.None);
+
+        expect(WsClient.connectedClients.size).toBe(0);
+        expect(WsClient.watchers.size).toBe(0);
+        expect(WsClient.conversations.size).toBe(0);
+
+        let data = JSON.stringify({ authInfo: { name: userName, password: 'test' }, conversationsSize: 100 });
+
+        let msg = await Promise.any(mockTransport.sendToClient(data));
+
+        let msgCount = 1;
+
+        const connectionId = '1';
+
+        expect(client.state).toBe(WsClientState.Connected);
+        expect(msg).toHaveLength(msgCount + 1);
+        expect(msg[msgCount - 1]).toBe(`{"type":"hello","instanceId":"${instanceId}"}`);
+        expect(msg[msgCount++]).toBe(`{"type":"connection","connectionId":"${connectionId}","id":"${userName}","conversations":{"conversations":[],"from":0,"size":100,"total":0}}`);
+
+        expect(queueMessages).toHaveLength(queueMessagesCount + 1);
+        expect(queueMessages[queueMessagesCount++]).toEqual({
+            instanceId: instanceId,
+            connectionId,
+            fromId: userName,
+            type: 'connected',
+            createdAt: currentTime,
+            data: null,
+        });
+
+        expect(WsClient.connectedClients.size).toBe(1);
+        expect(WsClient.connectedClients.has(userName)).toBeTruthy();
+
+        data = JSON.stringify({
+            type: 'wrong',
+        });
+
+        const disconnectedPromise = new Promise(resolve => {
+            disconnectedResolve = resolve;
+        });
+
+        const result = await mockTransport.sendToClientToClose(data);
+
+        expect(result).toEqual({
+            code: 1011,
+            data: 'Failed message processing. Wrong request type',
+        });
+
+        expect(mockTransport.closedByClient).toBeTruthy();
+        expect(mockTransport.readyState).toBe(TransportState.CLOSED);
+
+        const disconnectedMessage = await disconnectedPromise;
+
+        expect(disconnectedMessage).toEqual({
+            instanceId: instanceId,
+            connectionId,
+            fromId: userName,
+            type: 'disconnected',
+            createdAt: currentTime,
+            data: null,
+        });
+
+        expect(client.state).toBe(WsClientState.Disconnected);
+
+        expect(WsClient.joinedParticipants.size).toBe(0);
+        expect(WsClient.connectedClients.size).toBe(0);
+        expect(WsClient.watchers.size).toBe(0);
+        expect(WsClient.conversations.size).toBe(0);
+
+        queue.unsubscribe?.(queueCallback);
     });
 });

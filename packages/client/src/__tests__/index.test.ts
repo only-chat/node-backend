@@ -193,7 +193,7 @@ describe('client', () => {
             data: textData,
         });
 
-        let updateMessageData : MessageUpdate = {
+        let updateMessageData: MessageUpdate = {
             messageId: id,
             type: 'text',
             text: 'text2',
@@ -250,7 +250,7 @@ describe('client', () => {
             data: { text: 'text2' },
             updatedAt: currentTime,
         });
-        
+
         let newParticipants = [userName, ' test3 '];
         let updateConversationData = {
             title: 'new title',
@@ -471,7 +471,7 @@ describe('client', () => {
         expect(queueMessages).toHaveLength(queueMessagesCount + 2);
 
         id = '8';
-        
+
         expect(queueMessages[queueMessagesCount++]).toEqual({
             id,
             conversationId,
@@ -901,5 +901,59 @@ describe('client', () => {
         expect(WsClient.conversations.size).toBe(0);
 
         queue.unsubscribe?.(queueCallback);
+    });
+
+    it('request with binary data workflow', async () => {
+        const queue = await initializeQueue();
+
+        const store = await initializeStore();
+
+        const userStore = await initializeUserStore();
+
+        const response = await saveInstance();
+
+        const instanceId = response._id;
+
+        initializeClient({ queue, store, userStore, instanceId }, logger);
+
+        const mockTransport = new MockTransport();
+
+        const client = new WsClient(mockTransport);
+
+        expect(client.state).toBe(WsClientState.None);
+
+        const result = await mockTransport.sendToClientToClose(Buffer.alloc(1));
+
+        expect(result).toEqual({
+            code: 1011,
+            data: 'Failed message processing. Binary message',
+        });
+    });
+
+    it('request with non Buffer data workflow', async () => {
+        const queue = await initializeQueue();
+
+        const store = await initializeStore();
+
+        const userStore = await initializeUserStore();
+
+        const response = await saveInstance();
+
+        const instanceId = response._id;
+
+        initializeClient({ queue, store, userStore, instanceId }, logger);
+
+        const mockTransport = new MockTransport();
+
+        const client = new WsClient(mockTransport);
+
+        expect(client.state).toBe(WsClientState.None);
+
+        const result = await mockTransport.sendToClientToClose(0 as unknown as Buffer);
+
+        expect(result).toEqual({
+            code: 1011,
+            data: 'Failed message processing. Wrong transport',
+        });
     });
 });

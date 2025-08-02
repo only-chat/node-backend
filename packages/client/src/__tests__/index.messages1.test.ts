@@ -7,7 +7,7 @@ import { MockTransport } from '../mocks/mockTransport.js';
 
 import type { Log } from '@only-chat/types/log.js';
 import type { Message } from '@only-chat/types/queue.js';
-import { MessageStore, Message as StoreMessage } from '@only-chat/types/store.js';
+import type { MessageStore, Message as StoreMessage } from '@only-chat/types/store.js';
 
 const logger: Log | undefined = undefined;
 
@@ -772,6 +772,168 @@ describe('client', () => {
             });
 
             return 1;
+        });
+    });
+
+    it('updating wrong message', async () => {
+        await wrongMessageRequest(async (t, s) => {
+            const updateMessageData = {
+                messageId: '3',
+                type: 'text',
+                text: 'text2',
+            };
+            const data = JSON.stringify({
+                type: 'message-update',
+                data: updateMessageData,
+            });
+
+            const result = await t.sendToClientToClose(data);
+
+            expect(result).toEqual({
+                code: 1000,
+                data: 'Failed processConversationRequest. Wrong message',
+            });
+
+            return 0;
+        });
+    });
+
+    it('user is not allowed to update message', async () => {
+        await wrongMessageRequest(async (t, s) => {
+            const m: StoreMessage = {
+                id: '3',
+                conversationId: '1',
+                participants: ['test', 'test2'],
+                connectionId: '1',
+                fromId: 'test2',
+                type: 'text',
+                createdAt: currentTime,
+                data: {},
+            };
+
+            s!.saveMessage(m);
+
+            const updateMessageData = {
+                messageId: m.id,
+                type: 'text',
+                text: 'text2',
+            };
+
+            const data = JSON.stringify({
+                type: 'message-update',
+                data: updateMessageData,
+            });
+
+            const result = await t.sendToClientToClose(data);
+
+            expect(result).toEqual({
+                code: 1000,
+                data: 'Failed processConversationRequest. User is not allowed to update message',
+            });
+
+            m.deletedAt = currentTime;
+            s!.saveMessage(m);
+
+            return 0;
+        });
+    });
+
+    it('failed updating message, wrong file name', async () => {
+        await wrongMessageRequest(async (t, s) => {
+            const fileData = {
+                link: 'link',
+                name: 'name',
+                type: 'type',
+                size: 1
+            };
+
+            const fileRequest = {
+                type: 'file',
+                data: fileData,
+            };
+
+            let data = JSON.stringify(fileRequest);
+
+            const msg = await Promise.any(t.sendToClient(data));
+
+            let msgCount = 4;
+            expect(msg).toHaveLength(msgCount + 1);
+            expect(msg[msgCount++]).toBe(`{"type":"file","id":"2","instanceId":"1","conversationId":"1","participants":[\"test\",\"test2\"],"connectionId":"1","fromId":"test","createdAt":"${jsonCurrentTime}","data":${JSON.stringify(fileData)}}`);
+
+            fileData.name = '';
+
+            const updateMessageData = {
+                messageId: '2',
+                ...fileData,
+            };
+
+            data = JSON.stringify({
+                type: 'message-update',
+                data: updateMessageData,
+            });
+            
+            const result = await t.sendToClientToClose(data);
+
+            expect(result).toEqual({
+                code: 1000,
+                data: 'Failed processConversationRequest. Wrong file name',
+            });
+
+            return 1;
+        });
+    });
+
+    it('user is not allowed to update message', async () => {
+        await wrongMessageRequest(async (t, s) => {
+            const m: StoreMessage = {
+                id: '3',
+                conversationId: '1',
+                participants: ['test', 'test2'],
+                connectionId: '1',
+                fromId: 'test',
+                type: 'text',
+                createdAt: currentTime,
+                data: {},
+            };
+
+            s!.saveMessage(m);
+
+            const updateMessageData = {
+                messageId: m.id,
+                type: 'text',
+                text: 'text2',
+            };
+
+            const data = JSON.stringify({
+                type: 'message-update',
+                data: updateMessageData,
+            });
+
+            const saveMessage = s!.saveMessage;
+
+            s!.saveMessage = async m => {
+                m.deletedAt = undefined;
+
+                const r = saveMessage(m);
+
+                if (m.id === '3') {
+                    throw new Error('Test exception');
+                }
+
+                return r;
+            };
+
+            const result = await t.sendToClientToClose(data);
+
+            expect(result).toEqual({
+                code: 1011,
+                data: 'Failed processConversationRequest. Test exception',
+            });
+
+            m.deletedAt = currentTime;
+            saveMessage(m);
+
+            return 0;
         });
     });
 

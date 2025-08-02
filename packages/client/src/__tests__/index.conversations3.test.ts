@@ -7,6 +7,7 @@ import { MockTransport } from '../mocks/mockTransport.js';
 
 import type { Log } from '@only-chat/types/log.js';
 import type { Message } from '@only-chat/types/queue.js';
+import type { MessageStore } from '@only-chat/types/store.js';
 
 const logger: Log | undefined = undefined;
 
@@ -257,7 +258,7 @@ describe('client', () => {
     });
 });
 
-async function failedJoin(itJoinRequest: (t: MockTransport) => Promise<void>) {
+async function failedJoin(itJoinRequest: (t: MockTransport, s: MessageStore) => Promise<void>) {
     const queue = await initializeQueue();
 
     let disconnectedResolve: ((value: Message) => void) | undefined;
@@ -325,7 +326,7 @@ async function failedJoin(itJoinRequest: (t: MockTransport) => Promise<void>) {
         disconnectedResolve = resolve;
     });
 
-    await itJoinRequest(mockTransport);
+    await itJoinRequest(mockTransport, store);
 
     expect(mockTransport.closedByClient).toBeTruthy();
 
@@ -366,6 +367,26 @@ describe('client', () => {
             expect(result).toEqual({
                 code: 1000,
                 data: 'Failed join. Conversation title required',
+            });
+        });
+
+        await failedJoin(async (t, s) => {
+            const data = JSON.stringify({
+                type: 'join',
+                data: {
+                    participants: [' test2 '],
+                }
+            });
+    
+            s.saveConversation = async () => {
+                throw new Error('Test exception');
+            };
+
+            const result = await t.sendToClientToClose(data);
+    
+            expect(result).toEqual({
+                code: 1011,
+                data: 'Failed join. Test exception',
             });
         });
 

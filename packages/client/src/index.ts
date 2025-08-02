@@ -608,11 +608,12 @@ export class WsClient {
     private onMessage(data: Buffer, isBinary: boolean) {
         try {
             if (!(data instanceof Buffer)) {
-                throw new Error('Wrong message');
+                throw new Error('Wrong transport');
             }
 
             if (isBinary) {
-                throw new Error('Binary message received!');
+                logger?.error('Binary message received');
+                throw new Error('Binary message');
             }
 
             const msg: Request | ConnectRequest | undefined = JSON.parse(data?.toString());
