@@ -225,15 +225,6 @@ async function getPeerToPeerConversationId(peer1: string, peer2: string): Promis
 
     if (create) {
         peerToPeerConversationId = (++conversationId).toString();
-        conversations.set(peerToPeerConversationId, {
-            conversation: {
-                id: peerToPeerConversationId,
-                participants: [],
-                createdBy: '',
-                createdAt: new Date(),
-
-            }, messages: []
-        });
         peerToPeerConversations.set(id, peerToPeerConversationId);
     }
 

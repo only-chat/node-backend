@@ -542,7 +542,7 @@ export class WsClient {
                 conversation = {
                     id: conversationId,
                     participants: participantsArray,
-                    title: conversation?.title ?? data.title,
+                    title: data.title,
                     createdBy: conversation?.createdBy ?? this.id!,
                     createdAt: conversation?.createdAt ?? now,
                     updatedAt: conversation?.createdAt ? now : undefined,
@@ -968,7 +968,7 @@ export class WsClient {
                 this.lastError = 'Conversation closed';
                 return false;
             }
-            
+
             return true;
         }
 
