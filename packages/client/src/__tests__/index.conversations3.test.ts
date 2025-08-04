@@ -358,12 +358,28 @@ describe('client', () => {
             const data = JSON.stringify({
                 type: 'join',
                 data: {
+                    conversationId: '1',
+                }
+            });
+
+            const result = await t.sendToClientToClose(data);
+
+            expect(result).toEqual({
+                code: 1000,
+                data: 'Failed join. Wrong conversation',
+            });
+        });
+
+        await failedJoin(async (t) => {
+            const data = JSON.stringify({
+                type: 'join',
+                data: {
                     participants: ['test', ' test2 ', 'test3'],
                 }
             });
-    
+
             const result = await t.sendToClientToClose(data);
-    
+
             expect(result).toEqual({
                 code: 1000,
                 data: 'Failed join. Conversation title required',
@@ -377,13 +393,13 @@ describe('client', () => {
                     participants: [' test2 '],
                 }
             });
-    
+
             s.saveConversation = async () => {
                 throw new Error('Test exception');
             };
 
             const result = await t.sendToClientToClose(data);
-    
+
             expect(result).toEqual({
                 code: 1011,
                 data: 'Failed join. Test exception',
@@ -397,9 +413,9 @@ describe('client', () => {
                     participants: [],
                 }
             });
-    
+
             const result = await t.sendToClientToClose(data);
-    
+
             expect(result).toEqual({
                 code: 1000,
                 data: 'Failed join. Less than 2 participants',

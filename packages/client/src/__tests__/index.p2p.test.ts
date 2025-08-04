@@ -7,6 +7,7 @@ import { MockTransport } from '../mocks/mockTransport.js';
 
 import type { Log } from '@only-chat/types/log.js';
 import type { Message } from '@only-chat/types/queue.js';
+import { MessageStore } from '@only-chat/types/store.js';
 
 const logger: Log | undefined = undefined;
 
@@ -77,6 +78,22 @@ describe('client', () => {
         expect(WsClient.connectedClients.size).toBe(1);
         expect(WsClient.connectedClients.has(userName)).toBeTruthy();
 
+        const conversationId = '1';
+        const conversation = {
+            id: conversationId,
+            title: 'title',
+            participants: ['1', '2'],
+            createdBy: userName,
+            createdAt: new Date('2024-01-03'),
+            connected: [],
+        };
+
+        const saveResult = await store.saveConversation(conversation);
+        expect(saveResult._id).toBe(conversation.id);
+        expect(saveResult.result).toBe('created');
+
+        store.getPeerToPeerConversationId = async () => ({ id: conversation.id });
+
         let participants = [userName, ' test2 '];
 
         data = JSON.stringify({
@@ -96,17 +113,17 @@ describe('client', () => {
         expect(msg).toHaveLength(msgCount + 1);
 
         let id = '1';
-        const conversationId = '1';
         const connectionId = '1';
-        const createdConversation = {
+        const updatedConversation = {
             id: conversationId,
             participants,
-            createdBy: '',
-            createdAt: currentTime,
+            title: undefined,
+            createdBy: userName,
+            createdAt: conversation.createdAt,
             updatedAt: currentTime,
         }
 
-        expect(msg[msgCount - 1]).toBe(`{"type":"conversation","conversation":${JSON.stringify(createdConversation)},"connected":["${userName}"]}`);
+        expect(msg[msgCount - 1]).toBe(`{"type":"conversation","conversation":${JSON.stringify(updatedConversation)},"connected":["${userName}"],"messages":{"messages":[],"from":0,"size":100,"total":0}}`);
         expect(msg[msgCount++]).toBe(`{"type":"joined","id":"${id}","instanceId":"${instanceId}","conversationId":"${conversationId}","participants":${JSON.stringify(participants)},"connectionId":"${connectionId}","fromId":"${userName}","createdAt":"${jsonCurrentTime}","data":null}`);
 
         expect(queueMessages).toHaveLength(queueMessagesCount + 1);
@@ -123,7 +140,7 @@ describe('client', () => {
         });
 
         let storedConversation = await store.getParticipantConversationById(userName, conversationId);
-        expect(storedConversation).toEqual(createdConversation);
+        expect(storedConversation).toEqual(updatedConversation);
 
         let storedMessagesCount = 0;
         let storedMessages = await store.findMessages({});
@@ -230,5 +247,135 @@ describe('client', () => {
         expect(WsClient.conversations.size).toBe(0);
 
         queue.unsubscribe?.(queueCallback);
+    });
+
+    async function wrongRequest(itJoinRequest: (t: MockTransport, s: MessageStore) => Promise<void>) {
+        const queue = await initializeQueue();
+
+        let disconnectedResolve: ((value: Message) => void) | undefined;
+
+        let queueMessagesCount = 0;
+        const queueMessages: Message[] = [];
+        async function queueCallback(msg: Message) {
+            queueMessages.push(msg);
+
+            if (disconnectedResolve && 'disconnected' === msg.type) {
+                disconnectedResolve(msg);
+            }
+        }
+
+        queue.subscribe(queueCallback);
+
+        const store = await initializeStore();
+
+        const userStore = await initializeUserStore();
+
+        const response = await saveInstance();
+
+        const instanceId = response._id;
+
+        initializeClient({ queue, store, userStore, instanceId }, logger);
+
+        const mockTransport = new MockTransport();
+
+        const client = new WsClient(mockTransport);
+
+        expect(client.state).toBe(WsClientState.None);
+
+        expect(WsClient.connectedClients.size).toBe(0);
+        expect(WsClient.watchers.size).toBe(0);
+        expect(WsClient.conversations.size).toBe(0);
+
+        const userName = 'test';
+        let data = JSON.stringify({ authInfo: { name: userName, password: 'test' }, conversationsSize: 100 });
+
+        let msg = await Promise.any(mockTransport.sendToClient(data));
+
+        let msgCount = 1;
+
+        expect(client.state).toBe(WsClientState.Connected);
+        expect(msg).toHaveLength(msgCount + 1);
+        expect(msg[msgCount - 1]).toBe(`{"type":"hello","instanceId":"${instanceId}"}`);
+        expect(msg[msgCount++]).toBe(`{"type":"connection","connectionId":"1","id":"${userName}","conversations":{"conversations":[],"from":0,"size":100,"total":0}}`);
+
+        expect(queueMessages).toHaveLength(queueMessagesCount + 1);
+        expect(queueMessages[queueMessagesCount++]).toEqual({
+            instanceId: instanceId,
+            connectionId: '1',
+            fromId: userName,
+            type: 'connected',
+            createdAt: currentTime,
+            data: null,
+        });
+
+        expect(WsClient.connectedClients.size).toBe(1);
+        expect(WsClient.connectedClients.has(userName)).toBeTruthy();
+
+        await itJoinRequest(mockTransport, store);
+
+        expect(mockTransport.closedByClient).toBeTruthy();
+
+        expect(mockTransport.readyState).toBe(TransportState.CLOSED);
+        expect(client.state).toBe(WsClientState.Disconnected);
+
+
+        expect(WsClient.joinedParticipants.size).toBe(0);
+        expect(WsClient.connectedClients.size).toBe(0);
+        expect(WsClient.watchers.size).toBe(0);
+        expect(WsClient.conversations.size).toBe(0);
+
+        queue.unsubscribe?.(queueCallback);
+    }
+
+    it('unsuccessfull peer to peer workflow', async () => {
+        await wrongRequest(async (t, s) => {
+            s.saveConversation = async () => ({
+                _id: '',
+                result: 'failed',
+            });
+
+            const userName = 'test';
+
+            const participants = [userName, ' test2 '];
+
+            const data = JSON.stringify({
+                type: 'join',
+                data: {
+                    title: 'title',
+                    participants,
+                }
+            });
+
+            const result = await t.sendToClientToClose(data);
+
+            expect(result).toEqual({
+                code: 1000,
+                data: 'Failed join. Save conversation failed',
+            });
+        });
+    });
+
+    it('failed to get peer to peer conversation identifier workflow', async () => {
+        await wrongRequest(async (t, s) => {
+            s.getPeerToPeerConversationId = async () => undefined;
+
+            const userName = 'test';
+
+            const participants = [userName, ' test2 '];
+
+            const data = JSON.stringify({
+                type: 'join',
+                data: {
+                    participants,
+                }
+            });
+
+            const result = await t.sendToClientToClose(data);
+
+            expect(result).toEqual({
+                code: 1000,
+                data: 'Failed join. Unable to get peer to peer conversation identifier',
+            });
+        });
     });
 });
