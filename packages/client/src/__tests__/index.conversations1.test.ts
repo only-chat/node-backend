@@ -288,7 +288,7 @@ describe('client', () => {
 
         const result = await mockTransport.sendToClientToClose(data);
 
-        expect(result.data).toEqual('Failed processRequest. Conversation not found');
+        expect(result.data).toEqual('Failed processing request. Conversation not found');
         expect(mockTransport.closedByClient).toBeTruthy();
         expect(client.state).toBe(WsClientState.Disconnected);
         expect(queueMessages).toHaveLength(queueMessagesCount + 1);
@@ -406,7 +406,7 @@ describe('client', () => {
         queue.unsubscribe?.(queueCallback);
     }
 
-    it('failed processRequest with an exception', async () => {
+    it('Failed processing request with an exception', async () => {
         const userName = 'test';
 
         const conversation = {
@@ -433,7 +433,7 @@ describe('client', () => {
 
             const result = await t.sendToClientToClose(data);
 
-            expect(result.data).toEqual('Failed processRequest. Test exception');
+            expect(result.data).toEqual('Failed processing request. Test exception');
         });
     });
 
@@ -448,7 +448,7 @@ describe('client', () => {
 
             const result = await t.sendToClientToClose(data);
 
-            expect(result.data).toEqual('Failed processRequest. Conversation not found');
+            expect(result.data).toEqual('Failed processing request. Conversation not found');
         });
     });
 
@@ -463,7 +463,7 @@ describe('client', () => {
 
             const result = await t.sendToClientToClose(data);
 
-            expect(result.data).toEqual('Failed processRequest. Wrong conversation identifier');
+            expect(result.data).toEqual('Failed processing request. Wrong conversation identifier');
         });
     });
 
@@ -560,7 +560,7 @@ describe('client', () => {
 
             const result = await t.sendToClientToClose(data);
 
-            expect(result.data).toEqual('Failed processRequest. Close conversation failed');
+            expect(result.data).toEqual('Failed processing request. Close conversation failed');
         });
     });
 
@@ -589,7 +589,7 @@ describe('client', () => {
 
             const result = await t.sendToClientToClose(data);
 
-            expect(result.data).toEqual('Failed processRequest. Conversation already closed');
+            expect(result.data).toEqual('Failed processing request. Conversation already closed');
         });
     });
 
@@ -617,7 +617,7 @@ describe('client', () => {
 
             const result = await t.sendToClientToClose(data);
 
-            expect(result.data).toEqual('Failed processRequest. User is not allowed to close conversation');
+            expect(result.data).toEqual('Failed processing request. User is not allowed to close conversation');
         });
     });
 
@@ -661,7 +661,7 @@ describe('client', () => {
 
             const result = await t.sendToClientToClose(data);
 
-            expect(result.data).toEqual('Failed processRequest. Update conversation failed');
+            expect(result.data).toEqual('Failed processing request. Update conversation failed');
         });
     });
 
@@ -689,7 +689,7 @@ describe('client', () => {
 
             const result = await t.sendToClientToClose(data);
 
-            expect(result.data).toEqual('Failed processRequest. User is not allowed to update conversation');
+            expect(result.data).toEqual('Failed processing request. User is not allowed to update conversation');
         });
     });
 });

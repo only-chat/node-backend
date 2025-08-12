@@ -30,6 +30,19 @@ export interface LoadRequest {
     before?: Date
 }
 
+enum StopStatus {
+    Deleted = 'Deleted',
+    FailedConnect = 'Failed connect',
+    FailedJoin = 'Failed join',
+    FailedProcessConversationRequest = 'Failed processing conversation request',
+    FailedProcessMessage = 'Failed processing message',
+    FailedProcessRequest = 'Failed processing request',
+    FailedWatch = 'Failed watch',
+    Removed = 'Removed',
+    RemovedByPrticipant = 'Removed by new participant',
+    Stopped = 'Stopped',
+}
+
 interface JoinRequest {
     conversationId?: string;
     title?: string;
@@ -118,7 +131,7 @@ export class WsClient {
 
         for (const c of info.clients) {
             if (c.id && !info.participants.has(c.id)) {
-                await c.stop('Removed by new participant');
+                await c.stop(StopStatus.RemovedByPrticipant);
             }
         }
     }
@@ -308,7 +321,7 @@ export class WsClient {
                     }
 
                     if (wc.conversation?.id === conversationId && qm.type === 'deleted') {
-                        await wc.stop('Deleted');
+                        await wc.stop(StopStatus.Deleted);
                     }
                 });
 
@@ -374,7 +387,7 @@ export class WsClient {
                             wc.send(qm);
 
                             if (updated && false === participants?.has(wc.id!)) {
-                                await wc.stop('Removed');
+                                await wc.stop(StopStatus.Removed);
                             }
                         });
                     }
@@ -438,7 +451,7 @@ export class WsClient {
         }
     }
 
-    private async stop(statusDescription: string, err?: any) {
+    private async stop(status: StopStatus, err?: any) {
         if (logger && err?.message) {
             logger.error(err.message);
         }
@@ -451,6 +464,8 @@ export class WsClient {
 
         const maxStatusLen = 123;
         const dotSpace = '. ';
+
+        let statusDescription = status as string;
 
         [this.lastError, err?.message].forEach(v => {
             if (v && statusDescription.length + dotSpace.length < maxStatusLen) {
@@ -468,10 +483,6 @@ export class WsClient {
 
         if ([TransportState.CLOSING, TransportState.CLOSED].includes(this.transport.readyState)) {
             return;
-        }
-
-        if (statusDescription.length > maxStatusLen) {
-            statusDescription = statusDescription.substring(0, maxStatusLen);
         }
 
         this.transport.close(err ? 1011 : 1000, statusDescription);
@@ -625,10 +636,10 @@ export class WsClient {
                 if (request && connectedRequestTypes.includes(request.type)) {
                     this.processRequest(request).then(result => {
                         if (!result) {
-                            this.stop('Failed processRequest');
+                            this.stop(StopStatus.FailedProcessRequest);
                         }
                     }).catch(e => {
-                        this.stop('Failed processRequest', e);
+                        this.stop(StopStatus.FailedProcessRequest, e);
                     });
 
                     return;
@@ -642,13 +653,13 @@ export class WsClient {
                         if (request) {
                             this.connect(request).then(response => {
                                 if (!response) {
-                                    this.stop('Failed connect');
+                                    this.stop(StopStatus.FailedConnect);
                                 }
                             }).catch(e => {
-                                this.stop('Failed connect', e);
+                                this.stop(StopStatus.FailedConnect, e);
                             });
                         } else {
-                            this.stop('Failed connect');
+                            this.stop(StopStatus.FailedConnect);
                         }
                     }
                     break;
@@ -659,15 +670,15 @@ export class WsClient {
                             case 'join':
                                 this.join(request).then(response => {
                                     if (!response) {
-                                        this.stop('Failed join');
+                                        this.stop(StopStatus.FailedJoin);
                                     }
                                 }).catch(e => {
-                                    this.stop('Failed join', e);
+                                    this.stop(StopStatus.FailedJoin, e);
                                 });
                                 break;
                             case 'watch':
                                 this.watch().catch(e => {
-                                    this.stop('Failed watch', e);
+                                    this.stop(StopStatus.FailedWatch, e);
                                 });
                                 break;
                             default:
@@ -681,25 +692,25 @@ export class WsClient {
                         if (request) {
                             this.processConversationRequest(request).then(result => {
                                 if (!result) {
-                                    this.stop('Failed processConversationRequest');
+                                    this.stop(StopStatus.FailedProcessConversationRequest);
                                 }
                             }).catch(e => {
-                                this.stop('Failed processConversationRequest', e);
+                                this.stop(StopStatus.FailedProcessConversationRequest, e);
                             });
                         } else {
-                            this.stop('Wrong message');
+                            throw new Error('Wrong message');
                         }
                     }
                     break;
             }
         }
         catch (e: any) {
-            this.stop('Failed message processing', e);
+            this.stop(StopStatus.FailedProcessMessage, e);
         }
     }
 
     private onClose() {
-        this.stop('Stopped').finally(() => {
+        this.stop(StopStatus.Stopped).finally(() => {
 
             if (this.conversation?.id) {
                 WsClient.removeClient(this.conversation.id, this);

@@ -229,8 +229,8 @@ describe('client', () => {
             const result = await t.sendToClientToClose(data);
 
             expect(result).toEqual({
-                code: 1000,
-                data: 'Wrong message',
+                code: 1011,
+                data: 'Failed processing message. Wrong message',
             });
         });
 
@@ -241,7 +241,7 @@ describe('client', () => {
 
             expect(result).toEqual({
                 code: 1000,
-                data: 'Failed processConversationRequest. Wrong message',
+                data: 'Failed processing conversation request. Wrong message',
             });
         });
 
@@ -252,7 +252,7 @@ describe('client', () => {
 
             expect(result).toEqual({
                 code: 1011,
-                data: 'Failed message processing. Unexpected end of JSON input',
+                data: 'Failed processing message. Unexpected end of JSON input',
             });
         });
     });
@@ -395,14 +395,14 @@ describe('client', () => {
             });
 
             s.saveConversation = async () => {
-                throw new Error('Test exception');
+                throw new Error('Test exception message longer than 123 characters. Test exception message longer than 123 characters. Test exception message longer than 123 characters. Test exception message longer than 123 characters.');
             };
 
             const result = await t.sendToClientToClose(data);
 
             expect(result).toEqual({
                 code: 1011,
-                data: 'Failed join. Test exception',
+                data: 'Failed join. Test exception message longer than 123 characters. Test exception message longer than 123 characters. Test exc',
             });
         });
 

@@ -59,9 +59,7 @@ export class MockTransport implements Transport {
     }
 
     sendToClientToClose(data: string | Buffer): Promise<{ code?: number, data?: string | Buffer }> {
-        if (this.closedByClient || this.readyState !== TransportState.OPEN) {
-            throw new Error('Method not implemented.');
-        }
+        const wrongState =  this.closedByClient || this.readyState !== TransportState.OPEN;
 
         const p = new Promise<{ code?: number, data?: string | Buffer }>((resolve, reject) => {
             this.closeResolve = resolve;
@@ -72,6 +70,10 @@ export class MockTransport implements Transport {
             const isString = typeof data === 'string' || data instanceof String;
             const buffer = isString ? Buffer.from(data) : data;
             this.messageListeners.forEach(l => l(buffer, !isString));
+
+            if (wrongState) {
+                return Promise.resolve({ code: -1, data: 'Wrong transport state' });
+            }
         } catch (e) {
             if (this.closeReject) {
                 this.closeReject(e);

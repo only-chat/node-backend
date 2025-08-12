@@ -719,7 +719,7 @@ describe('client', () => {
 
         expect(result).toEqual({
             code: 1000,
-            data: 'Failed processConversationRequest. Update message failed',
+            data: 'Failed processing conversation request. Update message failed',
         });
 
         expect(WsClient.joinedParticipants.size).toBe(0);
@@ -892,7 +892,7 @@ describe('client', () => {
 
         expect(result).toEqual({
             code: 1000,
-            data: 'Failed processRequest. Wrong message',
+            data: 'Failed processing request. Wrong message',
         });
 
         expect(WsClient.joinedParticipants.size).toBe(0);
@@ -926,7 +926,7 @@ describe('client', () => {
 
         expect(result).toEqual({
             code: 1011,
-            data: 'Failed message processing. Binary message',
+            data: 'Failed processing message. Binary message',
         });
     });
 
@@ -953,7 +953,7 @@ describe('client', () => {
 
         expect(result).toEqual({
             code: 1011,
-            data: 'Failed message processing. Wrong transport',
+            data: 'Failed processing message. Wrong transport',
         });
     });
 });

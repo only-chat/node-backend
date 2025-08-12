@@ -180,7 +180,7 @@ describe('client', () => {
 
         expect(result).toEqual({
             code: 1000,
-            data: 'Failed processConversationRequest. Wrong message type',
+            data: 'Failed processing conversation request. Wrong message type',
         });
 
         expect(mockTransport.closedByClient).toBeTruthy();

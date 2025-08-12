@@ -351,7 +351,7 @@ describe('client', () => {
 
         expect(result).toEqual({
             code: 1000,
-            data: 'Failed processConversationRequest. Wrong message type',
+            data: 'Failed processing conversation request. Wrong message type',
         });
 
         expect(mockTransport.closedByClient).toBeTruthy();
@@ -649,7 +649,7 @@ describe('client', () => {
 
             expect(result).toEqual({
                 code: 1000,
-                data: 'Failed processConversationRequest. Wrong file name',
+                data: 'Failed processing conversation request. Wrong file name',
             });
 
             return 0;
@@ -672,7 +672,7 @@ describe('client', () => {
 
             expect(result).toEqual({
                 code: 1000,
-                data: 'Failed processConversationRequest. Wrong message',
+                data: 'Failed processing conversation request. Wrong message',
             });
 
             return 0;
@@ -708,7 +708,7 @@ describe('client', () => {
 
             expect(result).toEqual({
                 code: 1000,
-                data: 'Failed processConversationRequest. User is not allowed to delete message',
+                data: 'Failed processing conversation request. User is not allowed to delete message',
             });
 
             m.deletedAt = deleteMessageData.deletedAt;
@@ -768,7 +768,7 @@ describe('client', () => {
 
             expect(result).toEqual({
                 code: 1000,
-                data: 'Failed processConversationRequest. Delete message failed',
+                data: 'Failed processing conversation request. Delete message failed',
             });
 
             return 1;
@@ -791,7 +791,7 @@ describe('client', () => {
 
             expect(result).toEqual({
                 code: 1000,
-                data: 'Failed processConversationRequest. Wrong message',
+                data: 'Failed processing conversation request. Wrong message',
             });
 
             return 0;
@@ -828,7 +828,7 @@ describe('client', () => {
 
             expect(result).toEqual({
                 code: 1000,
-                data: 'Failed processConversationRequest. User is not allowed to update message',
+                data: 'Failed processing conversation request. User is not allowed to update message',
             });
 
             m.deletedAt = currentTime;
@@ -876,7 +876,7 @@ describe('client', () => {
 
             expect(result).toEqual({
                 code: 1000,
-                data: 'Failed processConversationRequest. Wrong file name',
+                data: 'Failed processing conversation request. Wrong file name',
             });
 
             return 1;
@@ -927,7 +927,7 @@ describe('client', () => {
 
             expect(result).toEqual({
                 code: 1011,
-                data: 'Failed processConversationRequest. Test exception',
+                data: 'Failed processing conversation request. Test exception',
             });
 
             m.deletedAt = currentTime;
@@ -973,7 +973,7 @@ describe('client', () => {
 
             expect(result).toEqual({
                 code: 1000,
-                data: 'Failed processConversationRequest. Conversation closed',
+                data: 'Failed processing conversation request. Conversation closed',
             });
 
             return 1;
@@ -1019,7 +1019,7 @@ describe('client', () => {
 
             expect(result).toEqual({
                 code: 1000,
-                data: 'Failed processConversationRequest. Conversation closed',
+                data: 'Failed processing conversation request. Conversation closed',
             });
 
             return 1;
