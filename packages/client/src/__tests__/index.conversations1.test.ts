@@ -97,7 +97,7 @@ describe('client', () => {
         expect(client.state).toBe(WsClientState.Connected);
         expect(msg).toHaveLength(msgCount + 1);
         expect(msg[msgCount - 1]).toBe(`{"type":"hello","instanceId":"${instanceId}"}`);
-        expect(msg[msgCount++]).toBe(`{"type":"connection","connectionId":"1","id":"${userName}","conversations":{"conversations":${JSON.stringify([{ ...conversation2, connected: [] }, { ...conversation1, connected: [] }])},"from":0,"size":100,"total":2}}`);
+        expect(msg[msgCount++]).toBe(`{"type":"connection","connectionId":"1","id":"${userName}","conversations":{"conversations":${JSON.stringify([{ conversation: conversation2, connected: [] }, { conversation: conversation1, connected: [] }])},"from":0,"size":100,"total":2}}`);
         expect(queueMessages).toHaveLength(queueMessagesCount + 1);
         expect(queueMessages[queueMessagesCount++]).toEqual({
             instanceId: instanceId,
@@ -125,7 +125,7 @@ describe('client', () => {
         expect(client.state).toBe(WsClientState.Connected);
         expect(msg).toHaveLength(msgCount);
 
-        const loadedConversationsData = { type: 'loaded', conversations: [{ ...conversation2, connected: [] }, { ...conversation1, connected: [] }], count: 2 };
+        const loadedConversationsData = { type: 'loaded', conversations: [{ conversation: conversation2, connected: [] }, { conversation: conversation1, connected: [] }], count: 2 };
 
         expect(msg[msgCount - 1]).toBe(JSON.stringify(loadedConversationsData));
 
@@ -365,7 +365,7 @@ describe('client', () => {
         expect(msg).toHaveLength(msgCount + 1);
         expect(msg[msgCount - 1]).toBe(`{"type":"hello","instanceId":"${instanceId}"}`);
         if (conversation?.participants.includes(userName)) {
-            expect(msg[msgCount++]).toBe(`{"type":"connection","connectionId":"1","id":"${userName}","conversations":{"conversations":[${JSON.stringify(conversation)}],"from":0,"size":100,"total":1}}`);
+            expect(msg[msgCount++]).toBe(`{"type":"connection","connectionId":"1","id":"${userName}","conversations":{"conversations":[${JSON.stringify({ conversation, connected: [] })}],"from":0,"size":100,"total":1}}`);
         } else {
             expect(msg[msgCount++]).toBe(`{"type":"connection","connectionId":"1","id":"${userName}","conversations":{"conversations":[],"from":0,"size":100,"total":0}}`);
         }

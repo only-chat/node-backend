@@ -32,14 +32,14 @@ describe('client', () => {
 
         const userName = 'test';
 
-        const conversation1 = {
+        const conversation = {
             id: '1',
             participants: [userName, '1', '2'],
             createdBy: userName,
             createdAt: new Date('2024-01-01'),
         };
 
-        let result1 = await store.saveConversation(conversation1);
+        let result1 = await store.saveConversation(conversation);
         expect(result1._id).toBe('1');
         expect(result1.result).toBe('created');
 
@@ -70,7 +70,7 @@ describe('client', () => {
         expect(client.state).toBe(WsClientState.Connected);
         expect(msg).toHaveLength(msgCount + 1);
         expect(msg[msgCount - 1]).toBe(`{"type":"hello","instanceId":"${instanceId}"}`);
-        expect(msg[msgCount++]).toBe(`{"type":"connection","connectionId":"1","id":"${userName}","conversations":{"conversations":[${JSON.stringify({ ...conversation1, connected: [] })}],"from":0,"size":100,"total":1}}`);
+        expect(msg[msgCount++]).toBe(`{"type":"connection","connectionId":"1","id":"${userName}","conversations":{"conversations":[${JSON.stringify({ conversation, connected: [] })}],"from":0,"size":100,"total":1}}`);
 
         expect(queueMessages).toHaveLength(queueMessagesCount + 1);
         expect(queueMessages[queueMessagesCount++]).toEqual({
