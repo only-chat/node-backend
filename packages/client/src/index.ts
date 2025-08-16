@@ -175,6 +175,7 @@ export class WsClient {
                 }
             }
         }
+
         return true;
     }
 
@@ -187,6 +188,7 @@ export class WsClient {
 
         if (result) {
             const toRemove: string[] = [];
+            
             WsClient.conversationsCache.forEach((v, k) => {
                 if (v.has(wc.id!)) {
                     for (const id of v) {
@@ -253,6 +255,7 @@ export class WsClient {
     private static async publishToWsList(conversationId: string, action: (client: WsClient, a?: Set<string>) => Promise<void>, l?: string[]) {
         const tasks: Promise<void>[] = [];
         const info = WsClient.conversations.get(conversationId);
+
         if (info) {
             info.clients.forEach(client => {
                 l?.push(client.id as string);
@@ -261,7 +264,8 @@ export class WsClient {
         }
 
         if (WsClient.watchers?.size) {
-            const participants: Set<string> | undefined = await WsClient.getConversationParticipants(conversationId);
+            const participants = await WsClient.getConversationParticipants(conversationId);
+
             participants?.forEach(
                 id => {
                     const client = WsClient.watchers.get(id);
@@ -278,6 +282,7 @@ export class WsClient {
 
     private static async syncConversation(conversationId: string): Promise<boolean> {
         const conversation = await store.getParticipantConversationById(undefined, conversationId);
+
         if (!conversation) {
             return false;
         }

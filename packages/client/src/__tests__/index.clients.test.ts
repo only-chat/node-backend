@@ -6,13 +6,13 @@ import { initialize as initializeUserStore } from '@only-chat/in-memory-user-sto
 import { MockTransport } from '../mocks/mockTransport.js';
 
 import type { Message, MessageQueue } from '@only-chat/types/queue.js';
-import type { Conversation, MessageStore } from '@only-chat/types/store.js';
+import type { Conversation } from '@only-chat/types/store.js';
 
 const currentTime = new Date('2024-08-01T00:00:00.000Z');
 const jsonCurrentTime = currentTime.toJSON();
 jest.useFakeTimers().setSystemTime(currentTime);
 
-async function createConversationClient(instanceId: string, connectionId: string, userName: string, conversation: Conversation, connected: string[], joinedId: string, queue: MessageQueue) {
+async function createConversationClient(instanceId: string, connectionId: string, userName: string, conversation: Conversation, connected: string[], disconnect: string[], joinedId: string, queue: MessageQueue) {
 
     let disconnectedResolve: ((value: Message) => void) | undefined;
 
@@ -77,10 +77,12 @@ async function createConversationClient(instanceId: string, connectionId: string
     [, msg] = await Promise.all(mockTransport.sendToClient(data));
 
     expect(client.state).toBe(WsClientState.Session);
-    expect(msg).toHaveLength(4);
+    expect(msg).toHaveLength(4 + disconnect?.length);
 
-    expect(msg[2]).toBe(`{"type":"conversation","conversation":${JSON.stringify(conversation)},"connected":${JSON.stringify([...connected, userName])},"messages":{"messages":[],"from":0,"size":100,"total":0}}`);
-    expect(msg[3]).toBe(`{"type":"joined","id":"${joinedId}","instanceId":"${instanceId}","conversationId":"${conversationId}","participants":${JSON.stringify(participants)},"connectionId":"${connectionId}","fromId":"${userName}","createdAt":"${jsonCurrentTime}","data":null}`);
+    const clients = connected.filter(c => !disconnect.includes(c));
+
+    expect(msg[msg.length - 2]).toBe(`{"type":"conversation","conversation":${JSON.stringify(conversation)},"connected":${JSON.stringify([...clients, userName])},"messages":{"messages":[],"from":0,"size":100,"total":0}}`);
+    expect(msg[msg.length - 1]).toBe(`{"type":"joined","id":"${joinedId}","instanceId":"${instanceId}","conversationId":"${conversationId}","participants":${JSON.stringify(participants)},"connectionId":"${connectionId}","fromId":"${userName}","createdAt":"${jsonCurrentTime}","data":null}`);
 
     expect(queueMessages).toHaveLength(2);
     expect(queueMessages[1]).toEqual({
@@ -165,7 +167,7 @@ async function createWatchClient(instanceId: string, connectionId: string, userN
 }
 
 describe('clients', () => {
-    it('successfull workflow', async () => {
+    it('successfull workflow 1', async () => {
         const queue = await initializeQueue();
 
         let disconnectedResolve1: ((value: Message) => void) | undefined;
@@ -195,17 +197,6 @@ describe('clients', () => {
 
         const userName = 'test';
 
-        const conversation1 = {
-            id: '1',
-            participants: [userName, '1', '2'],
-            createdBy: userName,
-            createdAt: new Date('2024-01-01'),
-        };
-
-        let result1 = await store.saveConversation(conversation1);
-        expect(result1._id).toBe('1');
-        expect(result1.result).toBe('created');
-
         const userStore = await initializeUserStore();
 
         const response = await saveInstance();
@@ -231,7 +222,7 @@ describe('clients', () => {
         expect(client.state).toBe(WsClientState.Connected);
         expect(msg).toHaveLength(2);
         expect(msg[0]).toBe(`{"type":"hello","instanceId":"${instanceId}"}`);
-        expect(msg[1]).toBe(`{"type":"connection","connectionId":"1","id":"${userName}","conversations":{"conversations":[${JSON.stringify({ conversation: conversation1, connected: [] })}],"from":0,"size":100,"total":1}}`);
+        expect(msg[1]).toBe(`{"type":"connection","connectionId":"1","id":"${userName}","conversations":{"conversations":[],"from":0,"size":100,"total":0}}`);
 
         expect(queueMessages).toHaveLength(queueMessagesCount + 1);
         expect(queueMessages[queueMessagesCount++]).toEqual({
@@ -255,7 +246,7 @@ describe('clients', () => {
         expect(client.state).toBe(WsClientState.WatchSession);
         expect(msg).toHaveLength(3);
 
-        expect(msg[2]).toBe(`{"type":"watching","conversations":{"conversations":[],"from":0,"size":0,"total":1}}`);
+        expect(msg[2]).toBe(`{"type":"watching","conversations":{"conversations":[],"from":0,"size":0,"total":0}}`);
 
         expect(WsClient.joinedParticipants.size).toBe(0);
         expect(WsClient.watchers.size).toBe(1);
@@ -426,11 +417,11 @@ describe('clients', () => {
 
         initializeClient({ queue, store, userStore, instanceId });
 
-        const c1 = await createConversationClient(instanceId, '1', participants[0], conversation, [], '1', queue);
+        const c1 = await createConversationClient(instanceId, '1', participants[0], conversation, [], [], '1', queue);
 
         const w = await createWatchClient(instanceId, '2', participants[1], conversation, [participants[0]], queue);
 
-        const c3 = await createConversationClient(instanceId, '3', participants[2], conversation, [participants[0]], '2', queue);
+        const c3 = await createConversationClient(instanceId, '3', participants[2], conversation, [participants[0]], [], '2', queue);
         for (let i = 0; i < 3; i++) {
             const c = [c1, w, c3][i];
 
@@ -459,6 +450,325 @@ describe('clients', () => {
 
             expect(c.client.state).toBe(WsClientState.Disconnected);
         }
+
+        expect(WsClient.joinedParticipants.size).toBe(0);
+        expect(WsClient.connectedClients.size).toBe(0);
+        expect(WsClient.watchers.size).toBe(0);
+        expect(WsClient.conversations.size).toBe(0);
+    });
+
+    it('successfull workflow 3', async () => {
+        const queue = await initializeQueue();
+        const store = await initializeStore();
+
+        const participants = ['test1', 'test2', 'test3'];
+
+        const conversation = {
+            id: '1',
+            title: 'conversation1',
+            participants,
+            createdBy: participants[0],
+            createdAt: new Date('2024-01-01'),
+        };
+
+        let result = await store.saveConversation(conversation);
+
+        expect(result._id).toBe('1');
+        expect(result.result).toBe('created');
+
+        const userStore = await initializeUserStore();
+
+        const response = await saveInstance();
+
+        const instanceId = response._id;
+
+        initializeClient({ queue, store, userStore, instanceId });
+
+        const c1 = await createConversationClient(instanceId, '1', participants[0], conversation, [], [], '1', queue);
+
+        const c2 = await createConversationClient(instanceId, '2', participants[2], conversation, [participants[0]], [], '2', queue);
+
+        const conversationInfo = WsClient.conversations.get(conversation.id)!;
+
+        conversationInfo.clients = [c2.client];
+
+        let closeData = await c1.transport.closeToClient('stop test');
+
+        expect(closeData).toEqual({
+            code: 1000,
+            data: 'Stopped',
+        });
+
+        expect(c1.transport.closedByClient).toBeTruthy();
+        expect(c1.transport.readyState).toBe(TransportState.CLOSED);
+
+        let disconnectedMessage = await c1.disconnectedPromise;
+
+        expect(disconnectedMessage).toEqual({
+            instanceId: instanceId,
+            connectionId: c1.client.connectionId,
+            conversationId: conversation.id,
+            participants: conversation.participants,
+            fromId: c1.client.id,
+            type: 'disconnected',
+            createdAt: currentTime,
+            data: null,
+        });
+
+        expect(c1.client.state).toBe(WsClientState.Disconnected);
+
+        WsClient.conversations.clear()
+
+        closeData = await c2.transport.closeToClient('stop test');
+
+        expect(closeData).toEqual({
+            code: 1000,
+            data: 'Stopped',
+        });
+
+        expect(c2.transport.closedByClient).toBeTruthy();
+        expect(c2.transport.readyState).toBe(TransportState.CLOSED);
+
+        disconnectedMessage = await c2.disconnectedPromise;
+
+        expect(disconnectedMessage).toEqual({
+            instanceId: instanceId,
+            connectionId: c2.client.connectionId,
+            conversationId: conversation.id,
+            participants: conversation.participants,
+            fromId: c2.client.id,
+            type: 'disconnected',
+            createdAt: currentTime,
+            data: null,
+        });
+
+        expect(c2.client.state).toBe(WsClientState.Disconnected);
+
+        expect(WsClient.joinedParticipants.size).toBe(0);
+        expect(WsClient.connectedClients.size).toBe(0);
+        expect(WsClient.watchers.size).toBe(0);
+        expect(WsClient.conversations.size).toBe(0);
+    });
+
+    it('delete conversation', async () => {
+        const queue = await initializeQueue();
+        const store = await initializeStore();
+
+        const participants = ['test1', 'test2'];
+
+        const conversation = {
+            id: '1',
+            title: 'conversation1',
+            participants,
+            createdBy: participants[0],
+            createdAt: new Date('2024-01-01'),
+        };
+
+        let result = await store.saveConversation(conversation);
+
+        expect(result._id).toBe('1');
+        expect(result.result).toBe('created');
+
+        const userStore = await initializeUserStore();
+
+        const response = await saveInstance();
+
+        const instanceId = response._id;
+
+        initializeClient({ queue, store, userStore, instanceId });
+
+        const c1 = await createConversationClient(instanceId, '1', participants[0], conversation, [], [], '1', queue);
+
+        const c2 = await createConversationClient(instanceId, '2', participants[1], conversation, [participants[0]], [], '2', queue);
+
+        const deleteConversationRequest = {
+            type: 'delete',
+            data: {
+                conversationId: conversation.id,
+            }
+        };
+
+        const data = JSON.stringify(deleteConversationRequest);
+
+        const msg = await Promise.any(c1.transport.sendToClient(data));
+
+        expect(msg).toHaveLength(6);
+
+        const deletedConversationData = {
+            ...deleteConversationRequest.data,
+            closedAt: currentTime as Date | undefined,
+            deletedAt: currentTime as Date | undefined,
+            updatedAt: undefined as Date | undefined,
+            participants: undefined as string[] | undefined
+        };
+
+        expect(msg[5]).toBe(`{"type":"deleted","data":${JSON.stringify(deletedConversationData)}}`);
+
+        const storedConversation = await store.getParticipantConversationById(participants[0], conversation.id);
+
+        expect(storedConversation).toBeUndefined();
+
+        const storedMessages = await store.findMessages({});
+        expect(storedMessages.total).toEqual(5);
+        expect(storedMessages.messages).toHaveLength(5);
+        expect(storedMessages.messages[2]).toEqual({
+            id: '3',
+            conversationId: conversation.id,
+            participants,
+            connectionId: c1.client.connectionId,
+            fromId: participants[0],
+            type: 'deleted',
+            createdAt: currentTime,
+            data: deletedConversationData,
+        });
+
+        expect(storedMessages.messages[3]).toEqual({
+            id: '4',
+            conversationId: conversation.id,
+            participants,
+            connectionId: c1.client.connectionId,
+            fromId: participants[0],
+            type: 'left',
+            createdAt: currentTime,
+            data: null,
+        });
+
+        expect(storedMessages.messages[4]).toEqual({
+            id: '5',
+            conversationId: conversation.id,
+            participants,
+            connectionId: c2.client.connectionId,
+            fromId: participants[1],
+            type: 'left',
+            createdAt: currentTime,
+            data: null,
+        });
+
+        let closeData = await c1.transport.closeToClient('stop test');
+
+        expect(closeData).toEqual({
+            code: 1000,
+            data: 'Deleted',
+        });
+
+        expect(c1.transport.closedByClient).toBeTruthy();
+        expect(c1.transport.readyState).toBe(TransportState.CLOSED);
+
+        let disconnectedMessage = await c1.disconnectedPromise;
+
+        expect(disconnectedMessage).toEqual({
+            instanceId: instanceId,
+            connectionId: c1.client.connectionId,
+            conversationId: conversation.id,
+            participants: conversation.participants,
+            fromId: c1.client.id,
+            type: 'disconnected',
+            createdAt: currentTime,
+            data: null,
+        });
+
+        expect(c1.client.state).toBe(WsClientState.Disconnected);
+
+        expect(c2.transport.closedByClient).toBeTruthy();
+        expect(c2.transport.readyState).toBe(TransportState.CLOSED);
+
+        disconnectedMessage = await c2.disconnectedPromise;
+
+        expect(disconnectedMessage).toEqual({
+            instanceId: instanceId,
+            connectionId: c2.client.connectionId,
+            conversationId: conversation.id,
+            participants: conversation.participants,
+            fromId: c2.client.id,
+            type: 'disconnected',
+            createdAt: currentTime,
+            data: null,
+        });
+
+        expect(c2.transport.closedByClient).toBeTruthy();
+        expect(c2.client.state).toBe(WsClientState.Disconnected);
+
+        expect(WsClient.joinedParticipants.size).toBe(0);
+        expect(WsClient.connectedClients.size).toBe(0);
+        expect(WsClient.watchers.size).toBe(0);
+        expect(WsClient.conversations.size).toBe(0);
+    });
+
+    it('remove participant', async () => {
+        const queue = await initializeQueue();
+        const store = await initializeStore();
+
+        const participants = ['test1', 'test2'];
+
+        const conversation = {
+            id: '1',
+            title: 'conversation1',
+            participants,
+            createdBy: participants[0],
+            createdAt: new Date('2024-01-01'),
+        };
+
+        let result = await store.saveConversation(conversation);
+
+        expect(result._id).toBe('1');
+        expect(result.result).toBe('created');
+
+        const userStore = await initializeUserStore();
+
+        const response = await saveInstance();
+
+        const instanceId = response._id;
+
+        initializeClient({ queue, store, userStore, instanceId });
+
+        const c1 = await createConversationClient(instanceId, '1', participants[0], conversation, [], [], '1', queue);
+
+        const conversationInfo = WsClient.conversations.get(conversation.id)!;
+
+        conversationInfo.participants.delete(participants[0]);
+
+        const c2 = await createConversationClient(instanceId, '2', participants[1], conversation, [participants[0]], [participants[0]], '3', queue);
+
+        let closeData = await c2.transport.closeToClient('stop test');
+
+        expect(closeData).toEqual({
+            code: 1000,
+            data: 'Stopped',
+        });
+
+        let disconnectedMessage = await c1.disconnectedPromise;
+
+        expect(disconnectedMessage).toEqual({
+            instanceId: instanceId,
+            connectionId: c1.client.connectionId,
+            conversationId: conversation.id,
+            participants: conversation.participants,
+            fromId: c1.client.id,
+            type: 'disconnected',
+            createdAt: currentTime,
+            data: null,
+        });
+
+        expect(c1.client.state).toBe(WsClientState.Disconnected);
+
+        expect(c2.transport.closedByClient).toBeTruthy();
+        expect(c2.transport.readyState).toBe(TransportState.CLOSED);
+
+        disconnectedMessage = await c2.disconnectedPromise;
+
+        expect(disconnectedMessage).toEqual({
+            instanceId: instanceId,
+            connectionId: c2.client.connectionId,
+            conversationId: conversation.id,
+            participants: conversation.participants,
+            fromId: c2.client.id,
+            type: 'disconnected',
+            createdAt: currentTime,
+            data: null,
+        });
+
+        expect(c2.transport.closedByClient).toBeTruthy();
+        expect(c2.client.state).toBe(WsClientState.Disconnected);
 
         expect(WsClient.joinedParticipants.size).toBe(0);
         expect(WsClient.connectedClients.size).toBe(0);
