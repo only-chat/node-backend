@@ -394,7 +394,7 @@ describe('clients', () => {
         const queue = await initializeQueue();
         const store = await initializeStore();
 
-        const participants = ['test1', 'test2', 'test3'];
+        const participants = ['test1', 'test2', 'test3', 'test4'];
 
         const conversation = {
             id: '1',
@@ -419,11 +419,14 @@ describe('clients', () => {
 
         const c1 = await createConversationClient(instanceId, '1', participants[0], conversation, [], [], '1', queue);
 
-        const w = await createWatchClient(instanceId, '2', participants[1], conversation, [participants[0]], queue);
+        const c2 = await createConversationClient(instanceId, '2', participants[2], conversation, [participants[0]], [], '2', queue);
 
-        const c3 = await createConversationClient(instanceId, '3', participants[2], conversation, [participants[0]], [], '2', queue);
-        for (let i = 0; i < 3; i++) {
-            const c = [c1, w, c3][i];
+        const w1 = await createWatchClient(instanceId, '3', participants[1], conversation, [participants[0], participants[2]], queue);
+        
+        const w2 = await createWatchClient(instanceId, '4', participants[3], conversation, [participants[0], participants[2]], queue);
+
+        for (let i = 0; i < 4; i++) {
+            const c = [c1, c2, w1, w2][i];
 
             const closeData = await c.transport.closeToClient('stop test');
 
@@ -440,8 +443,8 @@ describe('clients', () => {
             expect(disconnectedMessage).toEqual({
                 instanceId: instanceId,
                 connectionId: c.client.connectionId,
-                conversationId: c === w ? undefined : conversation.id,
-                participants: c === w ? undefined : conversation.participants,
+                conversationId: c === w1 || c === w2 ? undefined : conversation.id,
+                participants: c === w1 || c === w2 ? undefined : conversation.participants,
                 fromId: c.client.id,
                 type: 'disconnected',
                 createdAt: currentTime,
