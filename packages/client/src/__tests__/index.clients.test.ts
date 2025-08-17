@@ -706,7 +706,7 @@ describe('clients', () => {
             createdAt: currentTime,
             data: null,
         });
-         
+
         expect(w.transport.closedByClient).toBeTruthy();
         expect(w.transport.readyState).toBe(TransportState.CLOSED);
         expect(w.transport.sentMessages).toHaveLength(12);
@@ -801,7 +801,7 @@ describe('clients', () => {
         expect(WsClient.conversations.size).toBe(0);
     });
 
-     it('queue messages', async () => {
+    it('queue messages', async () => {
         const queue = await initializeQueue();
         const store = await initializeStore();
 
@@ -851,7 +851,7 @@ describe('clients', () => {
             text: 'text',
         };
 
-        queue.publish({
+        await queue.publish({
             id: '3',
             conversationId: conversation1.id,
             participants: participants1,
@@ -863,8 +863,20 @@ describe('clients', () => {
             data: textData,
         });
 
-        queue.publish({
+        await queue.publish({
             id: '4',
+            conversationId: conversation2.id,
+            participants: participants2,
+            instanceId: instanceId,
+            connectionId: '3',
+            fromId: 'test3',
+            type: 'text',
+            createdAt: currentTime,
+            data: textData,
+        });
+
+        await queue.publish({
+            id: '5',
             conversationId: conversation2.id,
             participants: participants2,
             instanceId: instanceId,
@@ -921,8 +933,8 @@ describe('clients', () => {
 
         expect(w2.client.state).toBe(WsClientState.Disconnected);
 
-        expect(w1.transport.sentMessages).toHaveLength(3);
-        expect(w2.transport.sentMessages).toHaveLength(3);
+        expect(w1.transport.sentMessages).toHaveLength(4);
+        expect(w2.transport.sentMessages).toHaveLength(4);
 
         expect(WsClient.joinedParticipants.size).toBe(0);
         expect(WsClient.connectedClients.size).toBe(0);
