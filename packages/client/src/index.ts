@@ -188,7 +188,7 @@ export class WsClient {
 
         if (result) {
             const toRemove: string[] = [];
-            
+
             WsClient.conversationsCache.forEach((v, k) => {
                 if (v.has(wc.id!)) {
                     for (const id of v) {
@@ -356,7 +356,7 @@ export class WsClient {
         switch (qm.type) {
             case 'text':
             case 'file':
-                if (null === qm.data) {
+                if (null == qm.data) {
                     break;
                 }
             /* FALLTHROUGH */
