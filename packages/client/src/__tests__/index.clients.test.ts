@@ -422,7 +422,7 @@ describe('clients', () => {
         const c2 = await createConversationClient(instanceId, '2', participants[2], conversation, [participants[0]], [], '2', queue);
 
         const w1 = await createWatchClient(instanceId, '3', participants[1], conversation, [participants[0], participants[2]], queue);
-        
+
         const w2 = await createWatchClient(instanceId, '4', participants[3], conversation, [participants[0], participants[2]], queue);
 
         for (let i = 0; i < 4; i++) {
