@@ -134,7 +134,7 @@ export class WsClient {
         t.send(JSON.stringify({ type: 'hello', instanceId }), { binary: false, fin: true });
     }
 
-    static async addClient(conversation: Conversation, wc: WsClient) {
+    private static async addClient(conversation: Conversation, wc: WsClient) {
         let info = WsClient.conversations.get(conversation.id!);
         if (!info) {
             info = { participants: new Set<string>(conversation.participants), clients: [wc] };
@@ -447,20 +447,24 @@ export class WsClient {
             id = response?._id;
         }
 
+        const message: QueueMessage = {
+            type,
+            id,
+            instanceId,
+            conversationId: this.conversation?.id,
+            participants: this.conversation?.participants,
+            connectionId: this.connectionId!,
+            fromId: this.id!,
+            clientMessageId: clientMessageId,
+            createdAt,
+            data: data as QueueMessageData,
+        };
+
         if (queue && (!Array.isArray(queue.acceptTypes) || (queue.acceptTypes as string[]).includes(type))) {
-            return await queue.publish({
-                type,
-                id,
-                instanceId,
-                conversationId: this.conversation?.id,
-                participants: this.conversation?.participants,
-                connectionId: this.connectionId!,
-                fromId: this.id!,
-                clientMessageId: clientMessageId,
-                createdAt,
-                data: data as QueueMessageData,
-            });
+            return await queue.publish(message);
         }
+
+        await WsClient.translateQueueMessage(message);
 
         return true;
     }

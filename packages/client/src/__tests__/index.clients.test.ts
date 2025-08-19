@@ -633,7 +633,6 @@ describe('clients', () => {
             data: 'Removed',
         });
 
-        //connection is stil opened 
         expect(c2.transport.closedByClient).toBeTruthy();
         expect(c2.transport.readyState).toBe(TransportState.CLOSED);
 
@@ -1132,6 +1131,233 @@ describe('clients', () => {
 
         expect(w1.transport.sentMessages).toHaveLength(4);
         expect(w2.transport.sentMessages).toHaveLength(4);
+
+        expect(WsClient.joinedParticipants.size).toBe(0);
+        expect(WsClient.connectedClients.size).toBe(0);
+        expect(WsClient.watchers.size).toBe(0);
+        expect(WsClient.conversations.size).toBe(0);
+    });
+
+    it('failed updating conversation', async () => {
+        const queue = await initializeQueue();
+        const store = await initializeStore();
+
+        const participants = ['test1', 'test2'];
+
+        const conversation = {
+            id: '1',
+            title: 'conversation1',
+            participants,
+            createdBy: participants[0],
+            createdAt: new Date('2024-01-01'),
+        };
+
+        let result = await store.saveConversation(conversation);
+
+        expect(result._id).toBe('1');
+        expect(result.result).toBe('created');
+
+        const userStore = await initializeUserStore();
+
+        const response = await saveInstance();
+
+        const instanceId = response._id;
+
+        initializeClient({ queue, store, userStore, instanceId });
+
+        const w = await createWatchClient(instanceId, '1', participants[0], conversation, [], queue);
+
+        const c1 = await createConversationClient(instanceId, '2', participants[0], conversation, [], [], '1', queue);
+
+        const c2 = await createConversationClient(instanceId, '3', participants[1], conversation, [participants[0]], [], '2', queue);
+
+        const closedPromise = new Promise(resolve => {
+            c2.transport.closeResolve = resolve;
+        });
+
+        const newParticipants = ['test1', 'test3'];
+
+        const updateConversationRequest = {
+            type: 'update',
+            data: {
+                conversationId: conversation.id,
+                title: 'updated title',
+                participants: newParticipants,
+            }
+        };
+
+        const info = WsClient.conversations.get(conversation.id);
+        info!.participants = new Set(newParticipants)
+
+        const getParticipantConversationById = store.getParticipantConversationById;
+
+        const data = JSON.stringify(updateConversationRequest);
+
+        let msg = await Promise.any(c1.transport.sendToClient(data));
+
+        expect(msg).toHaveLength(6);
+
+        const updatedConversationData = {
+            ...updateConversationRequest.data,
+            updatedAt: currentTime,
+            participants: newParticipants
+        };
+
+        expect(msg[5]).toBe(`{"type":"updated","data":${JSON.stringify(updatedConversationData)}}`);
+
+        const storedConversation = await getParticipantConversationById(participants[0], conversation.id);
+
+        expect(storedConversation).toEqual({
+            id: conversation.id,
+            title: updatedConversationData.title,
+            participants: updatedConversationData.participants,
+            createdBy: participants[0],
+            createdAt: conversation.createdAt,
+            updatedAt: updatedConversationData.updatedAt,
+        });
+
+        expect(WsClient.joinedParticipants.size).toBe(1);
+        expect(WsClient.connectedClients.size).toBe(2);
+        expect(WsClient.watchers.size).toBe(1);
+        expect(WsClient.conversations.size).toBe(1);
+
+        WsClient.conversations.clear();
+
+        store.getParticipantConversationById = () => Promise.resolve(undefined);
+
+        await queue.publish({
+            id: '5',
+            conversationId: conversation.id,
+            participants: newParticipants,
+            instanceId: instanceId,
+            connectionId: '4',
+            fromId: 'test3',
+            type: 'updated',
+            createdAt: currentTime,
+            data: updatedConversationData,
+        });
+
+        expect(WsClient.joinedParticipants.size).toBe(1);
+        expect(WsClient.connectedClients.size).toBe(2);
+        expect(WsClient.watchers.size).toBe(1);
+        expect(WsClient.conversations.size).toBe(0);
+
+        WsClient.conversations.set(conversation.id, info!);
+
+        store.getParticipantConversationById = getParticipantConversationById;
+
+        info!.participants = new Set()
+
+        await queue.publish({
+            id: '6',
+            conversationId: conversation.id,
+            participants: newParticipants,
+            instanceId: instanceId,
+            connectionId: '4',
+            fromId: 'test3',
+            type: 'updated',
+            createdAt: currentTime,
+            data: updatedConversationData,
+        });
+
+        let closeData = await closedPromise;
+
+        expect(closeData).toEqual({
+            code: 1000,
+            data: 'Removed',
+        });
+
+        expect(c2.transport.closedByClient).toBeTruthy();
+        expect(c2.transport.readyState).toBe(TransportState.CLOSED);
+
+        let disconnectedMessage = await c2.disconnectedPromise;
+
+        expect(disconnectedMessage).toEqual({
+            instanceId: instanceId,
+            connectionId: c2.client.connectionId,
+            conversationId: conversation.id,
+            participants: conversation.participants,
+            fromId: c2.client.id,
+            type: 'disconnected',
+            createdAt: currentTime,
+            data: null,
+        });
+
+        expect(c2.client.state).toBe(WsClientState.Disconnected);
+
+        closeData = await w.transport.closeToClient('stop test');
+
+        expect(closeData).toEqual({
+            code: 1000,
+            data: 'Stopped',
+        });
+
+        const storedMessages = await store.findMessages({});
+        expect(storedMessages.total).toEqual(4);
+        expect(storedMessages.messages).toHaveLength(4);
+        expect(storedMessages.messages[2]).toEqual({
+            id: '3',
+            conversationId: conversation.id,
+            participants: newParticipants,
+            connectionId: c1.client.connectionId,
+            fromId: participants[0],
+            type: 'updated',
+            createdAt: currentTime,
+            data: updatedConversationData,
+        });
+
+        expect(storedMessages.messages[3]).toEqual({
+            id: '4',
+            conversationId: conversation.id,
+            participants: newParticipants,
+            connectionId: c2.client.connectionId,
+            fromId: participants[1],
+            type: 'left',
+            createdAt: currentTime,
+            data: null,
+        });
+
+        closeData = await c1.transport.closeToClient('stop test');
+
+        expect(closeData).toEqual({
+            code: 1000,
+            data: 'Stopped',
+        });
+
+        expect(c1.transport.closedByClient).toBeTruthy();
+        expect(c1.transport.readyState).toBe(TransportState.CLOSED);
+
+        disconnectedMessage = await c1.disconnectedPromise;
+
+        expect(disconnectedMessage).toEqual({
+            instanceId: instanceId,
+            connectionId: c1.client.connectionId,
+            conversationId: conversation.id,
+            participants: conversation.participants,
+            fromId: c1.client.id,
+            type: 'disconnected',
+            createdAt: currentTime,
+            data: null,
+        });
+
+        expect(c1.client.state).toBe(WsClientState.Disconnected);
+
+        disconnectedMessage = await w.disconnectedPromise;
+
+        expect(disconnectedMessage).toEqual({
+            instanceId: instanceId,
+            connectionId: w.client.connectionId,
+            fromId: w.client.id,
+            type: 'disconnected',
+            createdAt: currentTime,
+            data: null,
+        });
+
+        expect(w.transport.closedByClient).toBeTruthy();
+        expect(w.transport.readyState).toBe(TransportState.CLOSED);
+        expect(w.transport.sentMessages).toHaveLength(9);
+
+        expect(w.client.state).toBe(WsClientState.Disconnected);
 
         expect(WsClient.joinedParticipants.size).toBe(0);
         expect(WsClient.connectedClients.size).toBe(0);
