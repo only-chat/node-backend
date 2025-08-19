@@ -1,7 +1,7 @@
 {
   "name": "@only-chat/elasticsearch-store",
   "version": "0.2.0-beta.22",
-  "description": "Elasticsearchn storage for only-chat",
+  "description": "Elasticsearch storage for only-chat",
   "homepage": "https://github.com/only-chat/node-backend/packages/stores/elasticsearch",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
