@@ -7,7 +7,7 @@ import { MockTransport } from '../mocks/mockTransport.js';
 
 import type { Log } from '@only-chat/types/log.js';
 import type { Message } from '@only-chat/types/queue.js';
-import { MessageUpdate } from '@only-chat/types/store.js';
+import type { MessageUpdate } from '@only-chat/types/store.js';
 
 const logger: Log | undefined = undefined;
 
