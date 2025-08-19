@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events'
 
-export declare const enum TransportState {
+export declare enum TransportState {
     /** The connection is not yet open. */
     CONNECTING = 0,
     /** The connection is open and ready to communicate. */

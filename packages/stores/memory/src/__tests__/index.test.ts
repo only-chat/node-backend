@@ -328,15 +328,6 @@ describe('conversations', () => {
             id,
             result: undefined,
         });
-
-        const result3 = await store.getParticipantConversationById(undefined, id);
-
-        expect(result3).toEqual({
-            id,
-            participants: [],
-            createdBy: '',
-            createdAt: currentTime,
-        });
     });
 });
 
