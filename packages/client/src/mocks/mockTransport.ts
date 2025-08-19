@@ -4,7 +4,7 @@ import { TransportState } from '../index.js';
 import type { Transport } from '@only-chat/types/transport.js';
 
 export class MockTransport implements Transport {
-    private readonly sentMessages: string[] = [];
+    public readonly sentMessages: string[] = [];
 
     private messageListeners: ((...args: any[]) => void)[] = [];
     private closeListeners: ((...args: any[]) => void)[] = [];

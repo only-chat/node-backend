@@ -1,5 +1,5 @@
 import type { AuthenticationInfo, UserStore } from '@only-chat/types/userStore.js';
-import type { Conversation, ConversationUpdate, ConversationsResult, FileMessage, FindRequest, FindResult, Message as StoreMessage, MessageDelete, MessageStore, MessageData, MessageType as StoreMessageType, MessageUpdate, TextMessage } from '@only-chat/types/store.js';
+import type { Conversation, ConversationUpdate, FileMessage, FindRequest, FindResult, Message as StoreMessage, MessageDelete, MessageStore, MessageData, MessageType as StoreMessageType, MessageUpdate, TextMessage } from '@only-chat/types/store.js';
 import type { Log } from '@only-chat/types/log.js';
 import type { Message as QueueMessage, MessageData as QueueMessageData, MessageQueue, MessageType as QueueMessageType } from '@only-chat/types/queue.js';
 import type { Transport } from '@only-chat/types/transport.js';
@@ -16,7 +16,7 @@ export enum TransportState {
 }
 
 export interface Config {
-    queue: MessageQueue;
+    queue?: MessageQueue;
     store: MessageStore;
     userStore: UserStore;
     instanceId: string;
@@ -43,21 +43,16 @@ enum StopStatus {
     Stopped = 'Stopped',
 }
 
-interface JoinRequest {
-    conversationId?: string;
-    title?: string;
-    messagesSize?: number;
-    participants?: string[];
+interface ConversationInfo {
+    participants: Set<string>;
+    clients: WsClient[];
 }
 
-type RequestType = 'join' | 'watch' | 'close' | 'delete' | 'update' | 'load' | 'load-messages' | 'message-update' | 'message-delete' | 'find' | QueueMessageType;
-
-type RequestData = FindRequest | JoinRequest | LoadRequest | QueueMessageData;
-
-interface Request {
-    type: RequestType;
-    clientMessageId?: string;
-    data: RequestData;
+interface ConversationsInfo {
+    conversation: Conversation
+    leftAt?: Date,
+    latestMessage?: StoreMessage,
+    connected: string[],
 }
 
 interface ConnectRequest {
@@ -65,10 +60,29 @@ interface ConnectRequest {
     conversationsSize?: number;
 }
 
-interface ConversationInfo {
-    participants: Set<string>;
-    clients: WsClient[];
+interface JoinRequest {
+    conversationId?: string;
+    title?: string;
+    messagesSize?: number;
+    participants?: string[];
 }
+
+interface Request {
+    type: RequestType;
+    clientMessageId?: string;
+    data: RequestData;
+}
+
+interface ParticipantConversations {
+    conversations: ConversationsInfo[]
+    from: number
+    size: number
+    total: number
+}
+
+type RequestType = 'join' | 'watch' | 'close' | 'delete' | 'update' | 'load' | 'load-messages' | 'message-update' | 'message-delete' | 'find' | QueueMessageType;
+
+type RequestData = FindRequest | JoinRequest | LoadRequest | QueueMessageData;
 
 export enum WsClientState {
     None = 0,
@@ -89,7 +103,7 @@ const types: StoreMessageType[] = ['file', 'text'];
 
 let instanceId: string = undefined!;
 let logger: Log | undefined;
-let queue: MessageQueue = undefined!;
+let queue: MessageQueue | undefined;
 let store: MessageStore = undefined!;
 let userStore: UserStore = undefined!;
 
@@ -103,11 +117,12 @@ export class WsClient {
     private static readonly conversationsCache: Map<string, Set<string>> = new Map();
 
     public connectionId?: string;
-    public conversation?: Conversation;
-    public state = WsClientState.None;
     public id?: string;
+    public state = WsClientState.None;
 
     private readonly transport: Transport;
+
+    private conversation?: Conversation;
     private lastError?: string;
 
     constructor(t: Transport) {
@@ -119,7 +134,7 @@ export class WsClient {
         t.send(JSON.stringify({ type: 'hello', instanceId }), { binary: false, fin: true });
     }
 
-    static async addClient(conversation: Conversation, wc: WsClient) {
+    private static async addClient(conversation: Conversation, wc: WsClient) {
         let info = WsClient.conversations.get(conversation.id!);
         if (!info) {
             info = { participants: new Set<string>(conversation.participants), clients: [wc] };
@@ -160,6 +175,7 @@ export class WsClient {
                 }
             }
         }
+
         return true;
     }
 
@@ -172,6 +188,7 @@ export class WsClient {
 
         if (result) {
             const toRemove: string[] = [];
+
             WsClient.conversationsCache.forEach((v, k) => {
                 if (v.has(wc.id!)) {
                     for (const id of v) {
@@ -183,7 +200,7 @@ export class WsClient {
                 }
             });
 
-            toRemove.forEach(WsClient.conversationsCache.delete);
+            toRemove.forEach(id => WsClient.conversationsCache.delete(id));
         }
 
         return result;
@@ -238,6 +255,7 @@ export class WsClient {
     private static async publishToWsList(conversationId: string, action: (client: WsClient, a?: Set<string>) => Promise<void>, l?: string[]) {
         const tasks: Promise<void>[] = [];
         const info = WsClient.conversations.get(conversationId);
+
         if (info) {
             info.clients.forEach(client => {
                 l?.push(client.id as string);
@@ -246,7 +264,8 @@ export class WsClient {
         }
 
         if (WsClient.watchers?.size) {
-            const participants: Set<string> | undefined = await WsClient.getConversationParticipants(conversationId);
+            const participants = await WsClient.getConversationParticipants(conversationId);
+
             participants?.forEach(
                 id => {
                     const client = WsClient.watchers.get(id);
@@ -263,6 +282,7 @@ export class WsClient {
 
     private static async syncConversation(conversationId: string): Promise<boolean> {
         const conversation = await store.getParticipantConversationById(undefined, conversationId);
+
         if (!conversation) {
             return false;
         }
@@ -336,7 +356,7 @@ export class WsClient {
         switch (qm.type) {
             case 'text':
             case 'file':
-                if (null === qm.data) {
+                if (null == qm.data) {
                     break;
                 }
             /* FALLTHROUGH */
@@ -427,20 +447,24 @@ export class WsClient {
             id = response?._id;
         }
 
-        if (!Array.isArray(queue.acceptTypes) || (queue.acceptTypes as string[]).includes(type)) {
-            return await queue.publish({
-                type,
-                id,
-                instanceId,
-                conversationId: this.conversation?.id,
-                participants: this.conversation?.participants,
-                connectionId: this.connectionId!,
-                fromId: this.id!,
-                clientMessageId: clientMessageId,
-                createdAt,
-                data: data as QueueMessageData,
-            });
+        const message: QueueMessage = {
+            type,
+            id,
+            instanceId,
+            conversationId: this.conversation?.id,
+            participants: this.conversation?.participants,
+            connectionId: this.connectionId!,
+            fromId: this.id!,
+            clientMessageId: clientMessageId,
+            createdAt,
+            data: data as QueueMessageData,
+        };
+
+        if (queue && (!Array.isArray(queue.acceptTypes) || (queue.acceptTypes as string[]).includes(type))) {
+            return await queue.publish(message);
         }
+
+        await WsClient.translateQueueMessage(message);
 
         return true;
     }
@@ -1064,22 +1088,27 @@ export class WsClient {
         return this.publishMessage('connected', undefined, null, false);
     }
 
-    private async getConversations(from: number = 0, conversationsSize?: number, ids?: string[], excludeIds?: string[]): Promise<ConversationsResult> {
+    private async getConversations(from: number = 0, conversationsSize?: number, ids?: string[], excludeIds?: string[]): Promise<ParticipantConversations> {
 
         const size = conversationsSize != null && conversationsSize >= 0 ? conversationsSize : defaultSize;
 
         const result = await store.getParticipantConversations(this.id!, ids, excludeIds, from, size);
 
-        const conversationIds = result.conversations.map(c => c.id!);
-
-        if (!conversationIds?.length) {
-            return result;
+        if (!result.conversations?.length) {
+            return {
+                conversations: [],
+                from,
+                size,
+                total: result.total,
+            }
         }
+
+        const conversationIds = result.conversations.map(c => c.id!);
 
         const messagesInfo = await store.getLastMessagesTimestamps(this.id!, conversationIds);
 
         const conversations = result.conversations.map(c => ({
-            ...c,
+            conversation: c,
             leftAt: c.id! in messagesInfo ? messagesInfo[c.id!].left : undefined,
             latestMessage: c.id! in messagesInfo ? messagesInfo[c.id!].latest : undefined,
             connected: c.participants.filter(p => WsClient.joinedParticipants.get(c.id!)?.has(p)),

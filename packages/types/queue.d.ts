@@ -48,7 +48,7 @@ export interface Message {
 }
 
 export interface MessageQueue {
-    acceptTypes?: MessageType[]
+    readonly acceptTypes?: MessageType[]
     publish: (msg: Message) => Promise<boolean>
     subscribe: (callback: (msg: Message) => Promise<void>) => Promise<boolean>
     unsubscribe?: (callback: (msg: Message) => Promise<void>) => Promise<boolean>
