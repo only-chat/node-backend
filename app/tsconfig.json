@@ -12,4 +12,8 @@
     "sourceMap": true,
     "moduleResolution": "NodeNext"
   },
+  "include": [
+    "src/index.ts",
+    "src/apache-arrow.d.ts"
+  ]
 }

@@ -36,7 +36,7 @@ interface AggregationsTotalCountValueAggregate {
 }
 
 interface AggregationsConversationIdTermAggregate {
-    conversation_id_agg: estypes.AggregationsMultiBucketAggregateBase<estypes.AggregationsMultiTermsBucketKeys>;
+    conversation_id_agg: estypes.AggregationsMultiBucketAggregateBase<estypes.AggregationsStringTermsBucketKeys>;
 }
 
 let client: Client = undefined!;
@@ -374,7 +374,7 @@ async function getParticipantConversations(participant: string, ids: string[] | 
         });
 
         const buckets = messagesResult.aggregations!.conversation_id_agg.buckets as estypes.AggregationsStringTermsBucketKeys[];
-        comversationIds = buckets.map(b => b.key).filter(b => !!b);
+        comversationIds = buckets.map(b => b.key as string).filter(b => !!b);
     }
 
     const query = {
@@ -537,7 +537,7 @@ async function getPeerToPeerConversationId(peer1: string, peer2: string): Promis
 
         const refreshResult = await client.indices.refresh({ index: conversationsIndex });
 
-        if (refreshResult._shards.successful > 0) {
+        if (refreshResult._shards?.successful) {
             const result2: estypes.SearchResponseBody<PeerToPeerConversation> = await client.search(request);
             return { id: result2.hits.hits?.[0]?._source?.conversationId, result: saveResult.result };
         }
