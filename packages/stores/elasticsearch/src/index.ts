@@ -205,7 +205,7 @@ async function getLastMessagesTimestamps(fromId: string, conversationId: string[
                 {
                     bool: {
                         should: [
-                            { terms: { types } },
+                            { terms: { type: types } },
                             { term: { fromId: { value: fromId } } },
                         ]
                     },
