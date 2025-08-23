@@ -252,13 +252,12 @@ export class WsClient {
         return participants;
     }
 
-    private static async publishToWsList(conversationId: string, action: (client: WsClient, a?: Set<string>) => Promise<void>, l?: string[]) {
+    private static async publishToWsList(conversationId: string, action: (client: WsClient, a?: Set<string>) => Promise<void>) {
         const tasks: Promise<void>[] = [];
         const info = WsClient.conversations.get(conversationId);
 
         if (info) {
             info.clients.forEach(client => {
-                l?.push(client.id as string);
                 tasks.push(action(client, info.participants));
             });
         }
@@ -270,7 +269,6 @@ export class WsClient {
                 id => {
                     const client = WsClient.watchers.get(id);
                     if (client) {
-                        l?.push(client.id as string);
                         tasks.push(action(client));
                     }
                 }
@@ -389,10 +387,7 @@ export class WsClient {
                             break;
                     }
 
-                    const ids: string[] = [];
-                    await WsClient.publishToWsList(qm.conversationId, async (wc, _) => {
-                        wc.send(qm);
-                    }, ids);
+                    await WsClient.publishToWsList(qm.conversationId, async (wc, _) => wc.send(qm));
                 }
                 break;
 
