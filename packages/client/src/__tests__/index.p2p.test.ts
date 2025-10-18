@@ -16,7 +16,7 @@ const jsonCurrentTime = currentTime.toJSON();
 jest.useFakeTimers().setSystemTime(currentTime);
 
 describe('client', () => {
-    it('successfull peer to peer workflow', async () => {
+    async function successfullRequest(conversation, participants: string[], itJoinRequest: (m, c, MockTransport, s: MessageStore) => Promise<void>) {
         const queue = await initializeQueue();
 
         let disconnectedResolve: ((value: Message) => void) | undefined;
@@ -78,23 +78,13 @@ describe('client', () => {
         expect(WsClient.connectedClients.size).toBe(1);
         expect(WsClient.connectedClients.has(userName)).toBeTruthy();
 
-        const conversationId = '1';
-        const conversation = {
-            id: conversationId,
-            title: 'title',
-            participants: ['1', '2'],
-            createdBy: userName,
-            createdAt: new Date('2024-01-03'),
-            connected: [],
-        };
+        const conversationId = conversation.id;
 
         const saveResult = await store.saveConversation(conversation);
         expect(saveResult._id).toBe(conversation.id);
         expect(saveResult.result).toBe('created');
 
         store.getPeerToPeerConversationId = async () => ({ id: conversation.id });
-
-        let participants = [userName, ' test2 '];
 
         data = JSON.stringify({
             type: 'join',
@@ -114,16 +104,9 @@ describe('client', () => {
 
         let id = '1';
         const connectionId = '1';
-        const updatedConversation = {
-            id: conversationId,
-            participants,
-            title: undefined,
-            createdBy: userName,
-            createdAt: conversation.createdAt,
-            updatedAt: currentTime,
-        }
 
-        expect(msg[msgCount - 1]).toBe(`{"type":"conversation","conversation":${JSON.stringify(updatedConversation)},"connected":["${userName}"],"messages":{"messages":[],"from":0,"size":100,"total":0}}`);
+        await itJoinRequest(msg[msgCount - 1], conversation, mockTransport, store);
+
         expect(msg[msgCount++]).toBe(`{"type":"joined","id":"${id}","instanceId":"${instanceId}","conversationId":"${conversationId}","participants":${JSON.stringify(participants)},"connectionId":"${connectionId}","fromId":"${userName}","createdAt":"${jsonCurrentTime}","data":null}`);
 
         expect(queueMessages).toHaveLength(queueMessagesCount + 1);
@@ -138,9 +121,6 @@ describe('client', () => {
             createdAt: currentTime,
             data: null,
         });
-
-        let storedConversation = await store.getParticipantConversationById(userName, conversationId);
-        expect(storedConversation).toEqual(updatedConversation);
 
         let storedMessagesCount = 0;
         let storedMessages = await store.findMessages({});
@@ -247,7 +227,7 @@ describe('client', () => {
         expect(WsClient.conversations.size).toBe(0);
 
         queue.unsubscribe?.(queueCallback);
-    });
+    }
 
     async function wrongRequest(itJoinRequest: (t: MockTransport, s: MessageStore) => Promise<void>) {
         const queue = await initializeQueue();
@@ -326,6 +306,65 @@ describe('client', () => {
 
         queue.unsubscribe?.(queueCallback);
     }
+
+    it('successfull peer to peer workflow with updated participants', async () => {
+        const userName = 'test'
+        const participants = [userName, ' test2 '];
+
+        const conversation = {
+            id: '1',
+            title: 'title',
+            participants: ['1', '2'],
+            createdBy: userName,
+            createdAt: new Date('2024-01-03'),
+            connected: [],
+        };
+
+        await successfullRequest(conversation, participants, async (m, c, t, s) => {
+            const updatedConversation = {
+                id: c.id,
+                participants: participants.map(p => p.trim()),
+                title: undefined,
+                createdBy: userName,
+                createdAt: c.createdAt,
+                updatedAt: currentTime,
+            }
+
+            expect(m).toBe(`{"type":"conversation","conversation":${JSON.stringify(updatedConversation)},"connected":["${userName}"],"messages":{"messages":[],"from":0,"size":100,"total":0}}`);
+
+            const storedConversation = await s.getParticipantConversationById(c.createdBy, c.id);
+            expect(storedConversation).toEqual(updatedConversation);
+        });
+    });
+
+    it('successfull peer to peer workflow with deleted conversation ', async () => {
+        const userName = 'test'
+
+        const conversation = {
+            id: '1',
+            title: 'title',
+            participants: [userName, '2'],
+            createdBy: userName,
+            createdAt: new Date('2024-01-03'),
+            deletedAt: new Date('2024-01-04'),
+            connected: [],
+        };
+
+        await successfullRequest(conversation, conversation.participants, async (m, c, t, s) => {
+            const updatedConversation = {
+                id: c.id,
+                participants: conversation.participants,
+                title: undefined,
+                createdBy: '',
+                createdAt: currentTime,
+            }
+
+            expect(m).toBe(`{"type":"conversation","conversation":${JSON.stringify(updatedConversation)},"connected":["${userName}"],"messages":{"messages":[],"from":0,"size":100,"total":0}}`);
+
+            const storedConversation = await s.getParticipantConversationById(c.createdBy, c.id);
+            expect(storedConversation).toEqual(updatedConversation);
+        });
+    });
 
     it('unsuccessfull peer to peer workflow', async () => {
         await wrongRequest(async (t, s) => {

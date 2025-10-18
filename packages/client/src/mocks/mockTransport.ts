@@ -69,7 +69,7 @@ export class MockTransport implements Transport {
         try {
             const isString = typeof data === 'string' || data instanceof String;
             const buffer = isString ? Buffer.from(data) : data;
-            this.messageListeners.forEach(l => l(buffer, !isString));
+            this.messageListeners.forEach(l => l(buffer, !isString && (data instanceof Buffer)));
 
             if (wrongState) {
                 return Promise.resolve({ code: -1, data: 'Wrong transport state' });
