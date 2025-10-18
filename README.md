@@ -12,3 +12,7 @@ It only contains a stub version of the user store, as it is very business-specif
 There are also in-memory store and queue versions, which are mainly used for testing purposes.
 
 It is available for playing by url http://github.vyatkin.com/only-chat-client
+
+## Documentation
+
+All documentation is available in `doc` folder.
