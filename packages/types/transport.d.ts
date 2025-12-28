@@ -16,7 +16,7 @@ export interface Transport extends EventEmitter {
 
     close(code?: number, data?: string | Buffer): void
     send(data: string, options: {
-        binary?: boolean | undefined
-        fin?: boolean | undefined
-    },): void
+        binary?: boolean
+        fin?: boolean
+    }): void
 }

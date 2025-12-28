@@ -1,4 +1,4 @@
-import { EventEmitter } from 'events';
+import { EventEmitter } from 'node:events';
 import { TransportState } from '../index.js';
 
 import type { Transport } from '@only-chat/types/transport.js';
@@ -59,7 +59,7 @@ export class MockTransport implements Transport {
     }
 
     sendToClientToClose(data: string | Buffer): Promise<{ code?: number, data?: string | Buffer }> {
-        const wrongState =  this.closedByClient || this.readyState !== TransportState.OPEN;
+        const wrongState = this.closedByClient || this.readyState !== TransportState.OPEN;
 
         const p = new Promise<{ code?: number, data?: string | Buffer }>((resolve, reject) => {
             this.closeResolve = resolve;
@@ -121,7 +121,7 @@ export class MockTransport implements Transport {
         }
     };
 
-    send(data: string, options: { binary?: boolean | undefined; fin?: boolean | undefined; }): void {
+    send(data: string, options: { binary?: boolean; fin?: boolean; }): void {
         if (this.readyState !== TransportState.OPEN) {
             throw new Error('Method not implemented.');
         }
@@ -145,21 +145,20 @@ export class MockTransport implements Transport {
 
     on<K>(eventName: string | symbol, listener: (...args: any[]) => void): this {
 
-        switch (eventName) {
-            case 'message':
-                this.messageListeners.push(listener);
-                return this;
+        if (eventName === 'message') {
+            this.messageListeners.push(listener);
+            return this;
         }
 
         throw new Error('Method not implemented.');
     }
 
     once<K>(eventName: string | symbol, listener: (...args: any[]) => void): this {
-        switch (eventName) {
-            case 'close':
-                this.closeListeners.push(listener);
-                return this;
+        if (eventName === 'close') {
+            this.closeListeners.push(listener);
+            return this;
         }
+
         throw new Error('Method not implemented.');
     }
 
@@ -185,11 +184,11 @@ export class MockTransport implements Transport {
         throw new Error('Method not implemented.');
     }
 
-    listeners<K>(eventName: string | symbol): Array<Function> {
+    listeners<K>(eventName: string | symbol): ((...args: any[]) => void)[] {
         throw new Error('Method not implemented.');
     }
 
-    rawListeners<K>(eventName: string | symbol): Array<Function> {
+    rawListeners<K>(eventName: string | symbol): ((...args: any[]) => void)[] {
         throw new Error('Method not implemented.');
     }
 
@@ -209,7 +208,7 @@ export class MockTransport implements Transport {
         throw new Error('Method not implemented.');
     }
 
-    eventNames(): Array<(string | symbol) & (string | symbol)> {
+    eventNames(): Array<(string | symbol)> {
         throw new Error('Method not implemented.');
     }
 };

@@ -270,7 +270,7 @@ async function getLastMessagesTimestamps(fromId: string, conversationId: string[
 
         const id = m.conversationId!;
         if (prev[id]) {
-            if (!prev[id].left || prev[id].left! < m.createdAt) {
+            if (!prev[id].left || prev[id].left < m.createdAt) {
                 prev[id].left = m.createdAt;
             }
         }
@@ -429,7 +429,7 @@ async function getParticipantConversations(participant: string, ids: string[] | 
 
     const hits = result.hits.hits.map(h => ({ ...h._source!, id: h._id }));
 
-    var m = new Map(hits.map(i => [i.id, i]));
+    const m = new Map(hits.map(i => [i.id, i]));
 
     const conversations = comversationIds.map(id => m.get(id) as Conversation).filter(c => !!c);
 

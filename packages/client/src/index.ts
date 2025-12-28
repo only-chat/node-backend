@@ -127,9 +127,9 @@ export enum WsClientState {
 
 const defaultSize = 100;
 
-const sendStates = [WsClientState.Connected, WsClientState.Session, WsClientState.WatchSession];
+const sendStates = new Set([WsClientState.Connected, WsClientState.Session, WsClientState.WatchSession]);
 
-const connectedRequestTypes: RequestType[] = ['close', 'delete', 'find', 'load', 'update'];
+const connectedRequestTypes: Set<RequestType> = new Set(['close', 'delete', 'find', 'load', 'update']);
 
 const types: StoreMessageType[] = ['file', 'text'];
 
@@ -168,12 +168,12 @@ export class WsClient {
 
     private static async addClient(conversation: Conversation, wc: WsClient) {
         let info = WsClient.conversations.get(conversation.id!);
-        if (!info) {
+        if (info) {
+            info.clients.push(wc);
+        } else {
             info = { participants: new Set<string>(conversation.participants), clients: [wc] };
             WsClient.conversations.set(conversation.id!, info);
             WsClient.conversationsCache.delete(conversation.id!)
-        } else {
-            info.clients.push(wc);
         }
 
         for (const c of info.clients) {
@@ -497,7 +497,7 @@ export class WsClient {
     }
 
     private send(msg: unknown) {
-        if (this.transport && this.transport.readyState === TransportState.OPEN && sendStates.includes(this.state)) {
+        if (this.transport && this.transport.readyState === TransportState.OPEN && sendStates.has(this.state)) {
             return this.transport.send(JSON.stringify(msg), { binary: false, fin: true });
         }
     }
@@ -675,16 +675,16 @@ export class WsClient {
             }
 
             if (!(data instanceof Buffer)) {
-                throw new Error('Wrong transport');
+                throw new TypeError('Wrong transport');
             }
 
             const msg: Request | ConnectRequest | undefined = JSON.parse(data.toString());
 
-            if (msg && sendStates.includes(this.state)) {
+            if (msg && sendStates.has(this.state)) {
 
                 const request = msg as Request;
 
-                if (request && connectedRequestTypes.includes(request.type)) {
+                if (request && connectedRequestTypes.has(request.type)) {
                     this.processRequest(request).then(result => {
                         if (!result) {
                             this.stop(StopStatus.FailedProcessRequest);
@@ -1137,8 +1137,8 @@ export class WsClient {
 
         const conversations = result.conversations.map(c => ({
             conversation: c,
-            leftAt: c.id! in messagesInfo ? messagesInfo[c.id!].left : undefined,
-            latestMessage: c.id! in messagesInfo ? messagesInfo[c.id!].latest : undefined,
+            leftAt: (c.id!) in messagesInfo ? messagesInfo[c.id!].left : undefined,
+            latestMessage: (c.id!) in messagesInfo ? messagesInfo[c.id!].latest : undefined,
             connected: c.participants.filter(p => WsClient.joinedParticipants.get(c.id!)?.has(p)),
         }));
 
