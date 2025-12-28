@@ -1,13 +1,15 @@
 import type { Message, MessageQueue, MessageType } from '@only-chat/types/queue.js';
 
-const acceptTypes: MessageType[] = ['connected', 'disconnected', 'joined', 'left', 'closed', 'deleted', 'updated', 'message-updated', 'message-deleted', 'text', 'file'];
+const acceptTypes = new Set<MessageType>(['connected', 'disconnected', 'joined', 'left', 'closed', 'deleted', 'updated', 'message-updated', 'message-deleted', 'text', 'file']);
 
 export async function initialize(): Promise<MessageQueue> {
     const subscribers: ((msg: Message) => Promise<void>)[] = [];
 
     return {
+        acceptTypes: [...acceptTypes],
+
         async publish(msg) {
-            if (!acceptTypes.includes(msg.type)) {
+            if (!acceptTypes.has(msg.type)) {
                 return false;
             }
 

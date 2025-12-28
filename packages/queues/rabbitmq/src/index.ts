@@ -14,7 +14,7 @@ export interface Config {
     queueOptions?: amqp.Options.AssertQueue;
 }
 
-const acceptTypes: MessageType[] = ['connected', 'disconnected', 'joined', 'left', 'closed', 'deleted', 'updated', 'message-updated', 'message-deleted', 'text', 'file'];
+const acceptTypes = new Set<MessageType>(['connected', 'disconnected', 'joined', 'left', 'closed', 'deleted', 'updated', 'message-updated', 'message-deleted', 'text', 'file']);
 
 export async function initialize(config: Config): Promise<MessageQueue> {
     const c = await amqp.connect(config.url);
@@ -40,7 +40,7 @@ export async function initialize(config: Config): Promise<MessageQueue> {
 
         const type = deserialized.type?.toString();
 
-        if (!acceptTypes.includes(type)) {
+        if (!acceptTypes.has(type)) {
             return;
         }
 
@@ -65,10 +65,10 @@ export async function initialize(config: Config): Promise<MessageQueue> {
     });
 
     return {
-        acceptTypes,
+        acceptTypes: [...acceptTypes],
 
         async publish(msg) {
-            return acceptTypes.includes(msg.type) && channel.sendToQueue(q.queue, Buffer.from(JSON.stringify(msg)));
+            return acceptTypes.has(msg.type) && channel.sendToQueue(q.queue, Buffer.from(JSON.stringify(msg)));
         },
 
         async subscribe(callback) {
