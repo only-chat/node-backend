@@ -1,6 +1,6 @@
 {
   "name": "@only-chat/elasticsearch-store",
-  "version":  "0.2.0-beta.26",
+  "version":  "0.2.0-beta.27",
   "description": "Elasticsearch storage for only-chat",
   "homepage": "https://github.com/only-chat/node-backend/packages/stores/elasticsearch",
   "main": "dist/index.js",
@@ -20,7 +20,7 @@
     "@elastic/elasticsearch": "^9.2.0"
   },
   "devDependencies": {
-    "@only-chat/types":  "0.2.0-beta.26",
+    "@only-chat/types":  "0.2.0-beta.27",
     "typescript": "^5.9.2"
   },
   "files": [
