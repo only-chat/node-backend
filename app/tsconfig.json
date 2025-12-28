@@ -10,10 +10,9 @@
     "noImplicitAny": false,
     "esModuleInterop": true,
     "sourceMap": true,
-    "moduleResolution": "NodeNext"
+    "moduleResolution": "NodeNext",
   },
   "include": [
     "src/index.ts",
-    "src/apache-arrow.d.ts"
   ]
 }

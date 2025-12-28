@@ -15,6 +15,5 @@
   },
   "include": [
     "src/index.ts",
-    "src/apache-arrow.d.ts"
   ]
 }
