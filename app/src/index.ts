@@ -18,13 +18,11 @@ const store = await initializeStore(storeConfig);
 
 const userStore = await initializeUserStore(userStoreConfig);
 
-const response = await saveInstance(appId);
-
-const instanceId = response._id;
+const { _id: instanceId } = await saveInstance(appId);
 
 logger.debug('Instance id:', instanceId);
 
-initializeClient({queue, store, userStore, instanceId}, logger);
+initializeClient({ queue, store, userStore, instanceId }, logger);
 
 const ws = new WebSocketServer({ host, port });
 
@@ -35,7 +33,7 @@ ws.on('error', e => logger.error('WebSocketServer error:', e));
 ws.on('connection', s => new WsClient(s));
 
 ws.on('listening', () => {
-    const {address, port} = ws.address() as AddressInfo;
+    const { address, port } = ws.address() as AddressInfo;
     logger.debug('Server listening on %s:%d', address, port);
 });
 
