@@ -3,6 +3,24 @@ This is a client implementation for only-chat.
 
 The client is a main part of the platform that processes and dispatches messages from the transport layer and from the queue.
 
+# Get started
+
+```shell
+npm i --save @only-chat/client
+```
+
+```typescript
+import { initialize as initializeClient, WsClient } from '@only-chat/client'
+
+...
+
+initializeClient({queue, store, userStore, instanceId}, logger)
+
+const ws = new WebSocketServer({ host, port })
+
+ws.on('connection', s => new WsClient(s))
+```
+
 # Client Statuses
 
 | Status | Value | Description |
