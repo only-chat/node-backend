@@ -1,6 +1,6 @@
 import { jest, describe, expect, beforeEach, it } from '@jest/globals';
 import { initialize, saveInstance } from '../index.js';
-import type { Message, MessageStore, MessageType } from '@only-chat/types/store.js';
+import type { FindRequest, Message, MessageStore, MessageType } from '@only-chat/types/store.js';
 
 const createdAt = new Date('2024-01-01');
 
@@ -142,7 +142,7 @@ describe('saveMessage', () => {
 });
 
 describe('findMessages', () => {
-    let store;
+    let store: MessageStore;
 
     beforeEach(async () => {
         store = await initialize();
@@ -153,6 +153,8 @@ describe('findMessages', () => {
         r = await store.saveConversation(conversation4);
         expect(r.result).toBe('created');
         r = await store.saveConversation(conversation2);
+        expect(r.result).toBe('created');
+        r = await store.saveConversation(conversation5);
         expect(r.result).toBe('created');
 
         r = await store.saveConversation(conversation4);
@@ -232,10 +234,19 @@ describe('findMessages', () => {
             total: 0,
             conversations: [],
         });
+
+        const result7 = await store.getParticipantConversations('user5');
+
+        expect(result7).toEqual({
+            from: 0,
+            size: 100,
+            total: 1,
+            conversations: [conversation4],
+        });
     });
 
     it('should return filtered messages based on the provided request', async () => {
-        const request = {
+        const request: FindRequest = {
             ids: ['1', '2', '3', '5', '6', '7', '8', '9'],
             conversationIds: [] as string[],
             excludeIds: ['4', '5'],
@@ -292,14 +303,14 @@ describe('findMessages', () => {
             excludeIds: ['1', '2', '3'],
             text: 'Goodbye',
             fromIds: ['user3', 'user4'],
-            types: ['audio', 'video'],
+            types: ['joined'] as MessageType[],
             clientMessageIds: ['client3', 'client4'],
             createdFrom: new Date('2022-02-01'),
             createdTo: new Date('2022-02-28'),
             sort: 'updatedAt',
             sortDesc: false,
             size: 10,
-            from: 0,
+            from: 1,
         };
 
         const result = await store.findMessages(request);
@@ -396,11 +407,20 @@ describe('conversations', () => {
         r = await store.saveConversation(conversation5);
         expect(r.result).toBe('created');
 
+        r = await store.saveConversation(conversation6);
+        expect(r.result).toBe('created');
+
         const result1 = await store.getParticipantConversationById('user1', '6');
         expect(result1).toBeUndefined();
 
         const result2 = await store.getParticipantConversationById('user6', conversation5.id);
         expect(result2).toBeUndefined();
+
+        const result3 = await store.getParticipantConversationById(undefined, conversation6.id);
+        expect(result3).toBe(conversation6);
+
+        const result4 = await store.getParticipantConversationById(undefined, conversation4.id);
+        expect(result4).toBeUndefined();
     });
 
     it('should save conversations', async () => {

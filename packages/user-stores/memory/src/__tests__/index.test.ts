@@ -1,22 +1,26 @@
 import { describe, expect, beforeEach, it } from '@jest/globals';
-import { initialize } from '../index.js';
+import { initialize, users } from '../index.js';
+
+import type { UserStore } from '@only-chat/types/userStore.js';
 
 describe('authenticate', () => {
-  let userStore;
+  let userStore: UserStore;
 
   beforeEach(async () => {
     userStore = await initialize();
+
+    users.set('john', 'password123');
   });
 
   it('should return the username if authentication is successful', async () => {
     const info = {
-      name: 'john',
+      name: 'sara',
       password: 'password123',
     };
 
     const result = await userStore.authenticate(info);
 
-    expect(result).toBe('john');
+    expect(result).toBe('sara');
   });
 
   it('should return undefined if the password is incorrect', async () => {

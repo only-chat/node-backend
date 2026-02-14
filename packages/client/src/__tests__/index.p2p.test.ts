@@ -16,7 +16,7 @@ const jsonCurrentTime = currentTime.toJSON();
 jest.useFakeTimers().setSystemTime(currentTime);
 
 describe('client', () => {
-    async function successfullRequest(conversation, participants: string[], itJoinRequest: (m, c, MockTransport, s: MessageStore) => Promise<void>) {
+    async function successfullRequest(conversation, participants: string[], create: boolean, itJoinRequest: (m, c, MockTransport, s: MessageStore) => Promise<void>) {
         const queue = await initializeQueue();
 
         let disconnectedResolve: ((value: Message) => void) | undefined;
@@ -78,13 +78,18 @@ describe('client', () => {
         expect(WsClient.connectedClients.size).toBe(1);
         expect(WsClient.connectedClients.has(userName)).toBeTruthy();
 
+        if(create) {
+            const conversationIdResult = await store.getPeerToPeerConversationId(participants[0], participants[1]);
+        
+            expect(conversationIdResult).toEqual({id: '1', result: 'created'});
+        } 
+        
         const conversationId = conversation.id;
 
         const saveResult = await store.saveConversation(conversation);
+
         expect(saveResult._id).toBe(conversation.id);
         expect(saveResult.result).toBe('created');
-
-        store.getPeerToPeerConversationId = async () => ({ id: conversation.id });
 
         data = JSON.stringify({
             type: 'join',
@@ -307,6 +312,23 @@ describe('client', () => {
         queue.unsubscribe?.(queueCallback);
     }
 
+    it('successfull peer to peer workflow', async () => {
+        const userName = 'test'
+        const participants = [userName, 'test2'];
+
+        const conversation = {
+            id: '1',
+            title: 'title',
+            participants,
+            createdBy: userName,
+            createdAt: new Date('2024-01-03'),
+        };
+
+        await successfullRequest(conversation, participants, true, async (m, c, t, s) => {
+            expect(m).toBe(`{"type":"conversation","conversation":${JSON.stringify(conversation)},"connected":["${userName}"],"messages":{"messages":[],"from":0,"size":100,"total":0}}`);
+        });
+    });
+
     it('successfull peer to peer workflow with updated participants', async () => {
         const userName = 'test'
         const participants = [userName, ' test2 '];
@@ -320,7 +342,7 @@ describe('client', () => {
             connected: [],
         };
 
-        await successfullRequest(conversation, participants, async (m, c, t, s) => {
+        await successfullRequest(conversation, participants, false, async (m, c, t, s) => {
             const updatedConversation = {
                 id: c.id,
                 participants: participants.map(p => p.trim()),
@@ -330,7 +352,7 @@ describe('client', () => {
                 updatedAt: currentTime,
             }
 
-            expect(m).toBe(`{"type":"conversation","conversation":${JSON.stringify(updatedConversation)},"connected":["${userName}"],"messages":{"messages":[],"from":0,"size":100,"total":0}}`);
+            expect(m).toBe(`{"type":"conversation","conversation":${JSON.stringify(updatedConversation)},"connected":["${userName}"]}`);
 
             const storedConversation = await s.getParticipantConversationById(c.createdBy, c.id);
             expect(storedConversation).toEqual(updatedConversation);
@@ -350,7 +372,7 @@ describe('client', () => {
             connected: [],
         };
 
-        await successfullRequest(conversation, conversation.participants, async (m, c, t, s) => {
+        await successfullRequest(conversation, conversation.participants, false, async (m, c, t, s) => {
             const updatedConversation = {
                 id: c.id,
                 participants: conversation.participants,
@@ -359,7 +381,7 @@ describe('client', () => {
                 createdAt: currentTime,
             }
 
-            expect(m).toBe(`{"type":"conversation","conversation":${JSON.stringify(updatedConversation)},"connected":["${userName}"],"messages":{"messages":[],"from":0,"size":100,"total":0}}`);
+            expect(m).toBe(`{"type":"conversation","conversation":${JSON.stringify(updatedConversation)},"connected":["${userName}"]}`);
 
             const storedConversation = await s.getParticipantConversationById(c.createdBy, c.id);
             expect(storedConversation).toEqual(updatedConversation);

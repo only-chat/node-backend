@@ -452,6 +452,20 @@ describe('clients', () => {
             });
 
             expect(c.client.state).toBe(WsClientState.Disconnected);
+
+            if (i == 2) {
+                await queue.publish({
+                    id: '1',
+                    conversationId: conversation.id,
+                    participants: participants,
+                    instanceId: instanceId,
+                    connectionId: '5',
+                    fromId: participants[0],
+                    type: 'text',
+                    createdAt: currentTime,
+                    data: { text: 'text' },
+                });
+            }
         }
 
         expect(WsClient.joinedParticipants.size).toBe(0);
@@ -1226,12 +1240,84 @@ describe('clients', () => {
         store.getParticipantConversationById = () => Promise.resolve(undefined);
 
         await queue.publish({
+            id: '3',
+            conversationId: undefined,
+            participants: newParticipants,
+            instanceId: instanceId,
+            connectionId: '4',
+            fromId: newParticipants[3],
+            type: 'joined',
+            createdAt: currentTime,
+            data: null,
+        });
+
+        await queue.publish({
+            id: '4',
+            conversationId: undefined,
+            participants: newParticipants,
+            instanceId: instanceId,
+            connectionId: '4',
+            fromId: newParticipants[3],
+            type: 'left',
+            createdAt: currentTime,
+            data: null,
+        });
+
+        await queue.publish({
             id: '5',
+            conversationId: 'wrong',
+            participants: newParticipants,
+            instanceId: instanceId,
+            connectionId: '4',
+            fromId: newParticipants[3],
+            type: 'left',
+            createdAt: currentTime,
+            data: null,
+        });
+
+        await queue.publish({
+            id: '6',
+            conversationId: undefined,
+            participants: newParticipants,
+            instanceId: instanceId,
+            connectionId: '4',
+            fromId: newParticipants[0],
+            type: 'message-deleted',
+            createdAt: currentTime,
+            data: null,
+        });
+
+        await queue.publish({
+            id: '7',
+            conversationId: undefined,
+            participants: newParticipants,
+            instanceId: instanceId,
+            connectionId: '4',
+            fromId: newParticipants[0],
+            type: 'deleted',
+            createdAt: currentTime,
+            data: null,
+        });
+
+        await queue.publish({
+            id: '8',
+            conversationId: undefined,
+            participants: newParticipants,
+            instanceId: instanceId,
+            connectionId: '4',
+            fromId: newParticipants[0],
+            type: 'updated',
+            createdAt: currentTime,
+            data: null,
+        });
+
+        await queue.publish({
+            id: '9',
             conversationId: conversation.id,
             participants: newParticipants,
             instanceId: instanceId,
             connectionId: '4',
-            fromId: 'test3',
+            fromId: newParticipants[1],
             type: 'updated',
             createdAt: currentTime,
             data: updatedConversationData,
@@ -1254,7 +1340,7 @@ describe('clients', () => {
             participants: newParticipants,
             instanceId: instanceId,
             connectionId: '4',
-            fromId: 'test3',
+            fromId: newParticipants[1],
             type: 'updated',
             createdAt: currentTime,
             data: updatedConversationData,
