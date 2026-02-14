@@ -18,7 +18,7 @@
   "license": "MIT",
   "devDependencies": {
     "@only-chat/types":  "0.2.0-beta.27",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.3"
   },
   "files": [
     "dist/"
