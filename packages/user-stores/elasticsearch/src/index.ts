@@ -1,4 +1,6 @@
-import { Client, ClientOptions } from '@elastic/elasticsearch';
+import { Client } from '@elastic/elasticsearch';
+
+import type { ClientOptions } from '@elastic/elasticsearch';
 
 import type { AuthenticationInfo, UserStore } from '@only-chat/types/userStore.js';
 

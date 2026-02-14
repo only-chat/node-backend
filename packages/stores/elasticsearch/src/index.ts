@@ -1,9 +1,8 @@
-import { Client, ClientOptions } from '@elastic/elasticsearch';
+import { Client } from '@elastic/elasticsearch';
 
-import type { estypes } from '@elastic/elasticsearch';
+import type { estypes, ClientOptions } from '@elastic/elasticsearch';
+
 import type { Conversation, ConversationLastMessages, ConversationIdResult, ConversationsResult, FindRequest, FindResult, Message, MessageStore, MessageType, SaveResponse } from '@only-chat/types/store.js';
-
-export type { ClientOptions } from '@elastic/elasticsearch';
 
 export interface Config {
     options: ClientOptions;

@@ -5,7 +5,7 @@ export interface StoreAuthenticationInfo extends AuthenticationInfo {
     password: string;
 }
 
-let users = new Map<string, string>();
+export const users = new Map<string, string>();
 
 export async function initialize(): Promise<UserStore> {
     users.clear();

@@ -363,7 +363,7 @@ export class WsClient {
         }
 
         if (['closed', 'deleted'].includes(qm.type)) {
-            const conversationId = (qm.data as QueueConversationUpdate).conversationId ?? qm.conversationId;
+            const conversationId = (qm.data as QueueConversationUpdate | null)?.conversationId ?? qm.conversationId;
             if (conversationId) {
                 await WsClient.publishToWsList(conversationId, async (wc, _) => {
                     if (qm.connectionId !== wc.connectionId || qm.instanceId !== instanceId) {
@@ -384,48 +384,46 @@ export class WsClient {
         }
 
         switch (qm.type) {
+            case 'joined':
+                if (qm.conversationId) {
+                    const participants = WsClient.joinedParticipants.get(qm.conversationId);
+                    if (participants) {
+                        participants.add(qm.fromId);
+                    } else {
+                        WsClient.joinedParticipants.set(qm.conversationId, new Set([qm.fromId]));
+                    }
+
+                    await WsClient.publishToWsList(qm.conversationId, async (wc, _) => wc.send(qm));
+                }
+                break;
+            case 'left':
+                if (qm.conversationId) {
+                    const participants = WsClient.joinedParticipants.get(qm.conversationId);
+                    if (participants) {
+                        participants.delete(qm.fromId);
+                        if (!participants.size) {
+                            WsClient.joinedParticipants.delete(qm.conversationId);
+                        }
+                    }
+
+                    await WsClient.publishToWsList(qm.conversationId, async (wc, _) => wc.send(qm));
+                }
+                break;
             case 'text':
             case 'file':
                 if (null == qm.data) {
                     break;
                 }
             /* FALLTHROUGH */
-            case 'joined':
-            case 'left':
             case 'message-updated':
             case 'message-deleted':
                 if (qm.conversationId) {
-                    switch (qm.type) {
-                        case 'joined':
-                            {
-                                const participants = WsClient.joinedParticipants.get(qm.conversationId);
-                                if (participants) {
-                                    participants.add(qm.fromId);
-                                } else {
-                                    WsClient.joinedParticipants.set(qm.conversationId, new Set([qm.fromId]));
-                                }
-                            }
-                            break;
-                        case 'left':
-                            {
-                                const participants = WsClient.joinedParticipants.get(qm.conversationId);
-                                if (participants) {
-                                    participants.delete(qm.fromId);
-                                    if (!participants.size) {
-                                        WsClient.joinedParticipants.delete(qm.conversationId);
-                                    }
-                                }
-                            }
-                            break;
-                    }
-
                     await WsClient.publishToWsList(qm.conversationId, async (wc, _) => wc.send(qm));
                 }
                 break;
-
             case 'updated':
                 {
-                    const conversationId = (qm.data as QueueConversationUpdate).conversationId ?? qm.conversationId;
+                    const conversationId = (qm.data as QueueConversationUpdate | null)?.conversationId ?? qm.conversationId;
 
                     if (conversationId) {
                         const updated = await WsClient.syncConversation(conversationId);
@@ -579,6 +577,7 @@ export class WsClient {
 
             if (!data.title && participants.size == 2) {
                 const conversationIdResult = await store.getPeerToPeerConversationId(participantsArray[0], participantsArray[1]);
+                
                 if (!conversationIdResult?.id) {
                     this.lastError = ErrorMessage.UnableToGetPeerToPeerConversationIdentifier;
                     logger?.error(this.lastError);
@@ -595,8 +594,7 @@ export class WsClient {
 
             const conversationsParticipans = conversation ? new Set<string>(conversation.participants) : undefined;
 
-            if (!conversationsParticipans
-                || participants.size !== conversationsParticipans.size
+            if (participants.size !== conversationsParticipans?.size
                 || participantsArray.some(p => !conversationsParticipans.has(p))) {
 
                 const now = new Date();
