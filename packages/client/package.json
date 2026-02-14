@@ -1,6 +1,6 @@
 {
   "name": "@only-chat/client",
-  "version": "0.2.0-beta.27",
+  "version": "0.2.0-beta.28",
   "description": "Client for only-chat",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -18,10 +18,10 @@
   "license": "MIT",
   "devDependencies": {
     "@jest/globals": "^30.2.0",
-    "@only-chat/in-memory-queue": "0.2.0-beta.27",
-    "@only-chat/in-memory-store": "0.2.0-beta.27",
-    "@only-chat/in-memory-user-store": "0.2.0-beta.27",
-    "@only-chat/types": "0.2.0-beta.27",
+    "@only-chat/in-memory-queue": "0.2.0-beta.28",
+    "@only-chat/in-memory-store": "0.2.0-beta.28",
+    "@only-chat/in-memory-user-store": "0.2.0-beta.28",
+    "@only-chat/types": "0.2.0-beta.28",
     "@types/jest": "^30.0.0",
     "@types/node": "^25.2.3",
     "jest": "^30.2.0",
