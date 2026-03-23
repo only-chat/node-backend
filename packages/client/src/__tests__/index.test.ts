@@ -656,16 +656,23 @@ describe('client', () => {
             text: 'text',
         };
 
+        const metadata = {
+            property1: 'string',
+            property2: 2,
+            property3: false,
+        }
+
         data = JSON.stringify({
             type: 'text',
             data: textData,
+            metadata,
         });
 
         id = '2';
 
         msg = await Promise.any(mockTransport.sendToClient(data));
         expect(msg).toHaveLength(msgCount + 1);
-        expect(msg[msgCount++]).toBe(`{"type":"text","id":"${id}","instanceId":"${instanceId}","conversationId":"${conversationId}","participants":${JSON.stringify(participants)},"connectionId":"${connectionId}","fromId":"${userName}","createdAt":"${jsonCurrentTime}","data":${JSON.stringify(textData)}}`);
+        expect(msg[msgCount++]).toBe(`{"type":"text","id":"${id}","instanceId":"${instanceId}","conversationId":"${conversationId}","participants":${JSON.stringify(participants)},"connectionId":"${connectionId}","fromId":"${userName}","createdAt":"${jsonCurrentTime}","data":${JSON.stringify(textData)},"metadata":${JSON.stringify(metadata)}}`);
 
         expect(queueMessages).toHaveLength(queueMessagesCount + 1);
         expect(queueMessages[queueMessagesCount++]).toEqual({
@@ -678,6 +685,7 @@ describe('client', () => {
             type: 'text',
             createdAt: currentTime,
             data: textData,
+            metadata,
         });
 
         storedMessages = await store.findMessages({});
@@ -692,6 +700,7 @@ describe('client', () => {
             type: 'text',
             createdAt: currentTime,
             data: textData,
+            metadata,
         });
 
         const updateMessageData = {

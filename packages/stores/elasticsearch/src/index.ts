@@ -665,9 +665,6 @@ export async function initialize(config: Config): Promise<MessageStore> {
                     connectionId: { type: 'keyword' },
                     fromId: { type: 'keyword' },
                     clientMessageId: { type: 'keyword' },
-                    createdAt: { type: 'date_nanos' },
-                    updatedAt: { type: 'date' },
-                    deletedAt: { type: 'date' },
                     data: {
                         dynamic: 'strict',
                         properties: {
@@ -685,7 +682,14 @@ export async function initialize(config: Config): Promise<MessageStore> {
                             type: { type: 'keyword', index: false },
                             size: { type: 'long', index: false },
                         }
-                    }
+                    },
+                    metadata: {
+                        dynamic: true,
+                        properties: {},
+                    },
+                    createdAt: { type: 'date_nanos' },
+                    updatedAt: { type: 'date' },
+                    deletedAt: { type: 'date' },
                 }
             }
         });

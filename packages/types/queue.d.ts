@@ -32,6 +32,12 @@ export type MessageType = 'connected' | 'disconnected' | 'joined' | 'left' | 'cl
 
 export type MessageData = ConversationUpdate | FileMessage | MessageDelete | MessageUpdate | TextMessage | null
 
+export type MessageMetadataValue = string | number | boolean | null
+
+export type MessageMetadata = {
+  [name: string]: MessageMetadataValue | MessageMetadataValue[]
+}
+
 export interface Message {
     type: MessageType
     id?: string
@@ -42,6 +48,7 @@ export interface Message {
     connectionId: string
     fromId: string
     data: MessageData
+    metadata?: MessageMetadata
     createdAt: Date
     updatedAt?: Date
     deletedAt?: Date

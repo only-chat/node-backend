@@ -1,6 +1,6 @@
 import amqp from 'amqplib';
 
-import type { Message, MessageQueue, MessageType } from '@only-chat/types/queue.js';
+import type { Message, MessageMetadata as MessageMetadata, MessageQueue, MessageType } from '@only-chat/types/queue.js';
 
 export type { Options } from 'amqplib';
 
@@ -44,6 +44,28 @@ export async function initialize(config: Config): Promise<MessageQueue> {
             return;
         }
 
+        let metadata: MessageMetadata | undefined;
+
+        if (typeof deserialized.metadata === 'object') {
+
+            metadata = {}
+
+            for (const k in deserialized.metadata) {
+                if (Array.isArray(deserialized.metadata[k])) {
+
+                    metadata[k] = []
+
+                    for (const v of deserialized.metadata[k]) {
+                        if (typeof v !== 'object') {
+                            metadata[k].push(v)
+                        }
+                    }
+                } else if (typeof deserialized.metadata[k] !== 'object') {
+                    metadata[k] = deserialized.metadata[k]
+                }
+            }
+        }
+
         const m: Message = {
             type,
             id: deserialized.id?.toString(),
@@ -54,6 +76,7 @@ export async function initialize(config: Config): Promise<MessageQueue> {
             connectionId: deserialized.connectionId?.toString(),
             fromId: deserialized.fromId?.toString(),
             data: typeof deserialized.data === 'object' ? deserialized.data : null,
+            metadata,
             createdAt: new Date(deserialized.createdAt),
             updatedAt: deserialized.updatedAt ? new Date(deserialized.updatedAt) : undefined,
             deletedAt: deserialized.deletedAt ? new Date(deserialized.deletedAt) : undefined,

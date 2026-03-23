@@ -1,5 +1,5 @@
 import type { AuthenticationInfo, UserStore } from '@only-chat/types/userStore.js';
-import type { Conversation, ConversationUpdate as StoreConversationUpdate, FileMessage, FindRequest, FindResult, Message as StoreMessage, MessageDelete, MessageStore, MessageData, MessageType as StoreMessageType, MessageUpdate, TextMessage } from '@only-chat/types/store.js';
+import type { Conversation, ConversationUpdate as StoreConversationUpdate, FileMessage, FindRequest, FindResult, Message as StoreMessage, MessageDelete, MessageStore, MessageData, MessageMetadata, MessageType as StoreMessageType, MessageUpdate, TextMessage } from '@only-chat/types/store.js';
 import type { Log } from '@only-chat/types/log.js';
 import type { ConversationUpdate as QueueConversationUpdate, Message as QueueMessage, MessageData as QueueMessageData, MessageQueue, MessageType as QueueMessageType } from '@only-chat/types/queue.js';
 import type { Transport } from '@only-chat/types/transport.js';
@@ -99,10 +99,19 @@ interface LoadRequest {
     before?: Date
 }
 
+type RequestType = 'join' | 'watch' | 'close' | 'delete' | 'update' | 'load' | 'load-messages' | 'message-update' | 'message-delete' | 'find' | QueueMessageType;
+
+type RequestData = ConversationRequest | FindRequest | JoinRequest | LoadRequest | QueueMessageData;
+
+type RequestMetadataValue = string | number | boolean | null;
+
+type RequestMetadata = {[name: string]: RequestMetadataValue | RequestMetadataValue[]};
+
 interface Request {
     type: RequestType;
     clientMessageId?: string;
     data: RequestData;
+    metadata?: RequestMetadata;
 }
 
 interface ParticipantConversations {
@@ -111,10 +120,6 @@ interface ParticipantConversations {
     size: number
     total: number
 }
-
-type RequestType = 'join' | 'watch' | 'close' | 'delete' | 'update' | 'load' | 'load-messages' | 'message-update' | 'message-delete' | 'find' | QueueMessageType;
-
-type RequestData = ConversationRequest | FindRequest | JoinRequest | LoadRequest | QueueMessageData;
 
 export enum WsClientState {
     None = 0,
@@ -441,10 +446,10 @@ export class WsClient {
         }
     }
 
-    private async publishMessage(type: QueueMessageType, clientMessageId: string | undefined, data: RequestData, save: boolean): Promise<boolean> {
+    private async publishMessage(type: QueueMessageType, clientMessageId: string | undefined, data: RequestData, metadata: RequestMetadata | undefined, save: boolean): Promise<boolean> {
         let id: string | undefined = undefined;
         const createdAt = new Date();
-
+ 
         if (save) {
             const m: StoreMessage = {
                 type: type as StoreMessageType,
@@ -455,6 +460,7 @@ export class WsClient {
                 clientMessageId: clientMessageId,
                 createdAt,
                 data: data as MessageData,
+                metadata,
             };
 
             const response = await store.saveMessage(m);
@@ -483,6 +489,7 @@ export class WsClient {
             clientMessageId: clientMessageId,
             createdAt,
             data: data as QueueMessageData,
+            metadata,
         };
 
         if (queue && (!Array.isArray(queue.acceptTypes) || (queue.acceptTypes as string[]).includes(type))) {
@@ -495,7 +502,7 @@ export class WsClient {
     }
 
     private send(msg: unknown) {
-        if (this.transport && this.transport.readyState === TransportState.OPEN && sendStates.has(this.state)) {
+        if (this.transport?.readyState === TransportState.OPEN && sendStates.has(this.state)) {
             return this.transport.send(JSON.stringify(msg), { binary: false, fin: true });
         }
     }
@@ -524,10 +531,10 @@ export class WsClient {
 
         if (this.connectionId && this.id) {
             if (this.conversation) {
-                await this.publishMessage('left', undefined, null, true);
+                await this.publishMessage('left', undefined, null, undefined, true);
             }
 
-            await this.publishMessage('disconnected', undefined, null, false);
+            await this.publishMessage('disconnected', undefined, null, undefined, false);
         }
 
         if ([TransportState.CLOSING, TransportState.CLOSED].includes(this.transport.readyState)) {
@@ -662,7 +669,7 @@ export class WsClient {
 
         logger?.debug(`Client with id ${this.id} added successfully`);
 
-        return this.publishMessage('joined', request.clientMessageId, null, true);
+        return this.publishMessage('joined', request.clientMessageId, null, undefined, true);
     }
 
     private onMessage(data: Buffer, isBinary: boolean) {
@@ -980,7 +987,7 @@ export class WsClient {
 
                         this.send({ type, clientMessageId, data });
 
-                        return this.publishMessage(type, clientMessageId, data, true);
+                        return this.publishMessage(type, clientMessageId, data, request.metadata, true);
                     }
                 }
                 break;
@@ -1009,7 +1016,7 @@ export class WsClient {
 
                         this.send({ type, clientMessageId, data });
 
-                        return this.publishMessage(type, clientMessageId, data, true);
+                        return this.publishMessage(type, clientMessageId, data, request.metadata, true);
                     }
                 }
                 break;
@@ -1075,7 +1082,7 @@ export class WsClient {
                 return false;
         }
 
-        return this.publishMessage(broadcastType, request.clientMessageId, request.data, true);
+        return this.publishMessage(broadcastType, request.clientMessageId, request.data, request.metadata, true);
     }
 
     private async connect(request: ConnectRequest): Promise<boolean> {
@@ -1111,7 +1118,7 @@ export class WsClient {
             conversations,
         }), { binary: false, fin: true });
 
-        return this.publishMessage('connected', undefined, null, false);
+        return this.publishMessage('connected', undefined, null, undefined, false);
     }
 
     private async getConversations(from: number = 0, conversationsSize?: number, ids?: string[], excludeIds?: string[]): Promise<ParticipantConversations> {
